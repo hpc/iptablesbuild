@@ -11,8 +11,6 @@
 -A INPUT -f -m limit --limit 15/h --limit-burst 5 -j LOG --log-prefix "IPTABLES FRAGMENTS: "
 -A INPUT -f -j DROP
 
-# NTP
--A INPUT -p udp -m udp --dport 123 -s @Campus_ranges -j ACCEPT
 #
 # SSH INPUT Rules
 -A INPUT -p tcp -m tcp -m multiport --port 22 -m state --state NEW -s @ssh_inc_permit -j ACCEPT
