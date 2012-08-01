@@ -1,0 +1,16 @@
+######################################################################
+#
+# BEGIN - OUTGOING PERCEUS
+#
+# OUTGOING traffic related to Perceus, the cluster management software.
+#
+
+-A OUTPUT -p tcp -m tcp --dport 987 -j perceus_out_permit
+-A OUTPUT -p tcp -m tcp --dport 111 -j perceus_out_permit
+
+-A perceus_out_permit -d @perceus_out_permit -j ACCEPT
+-A perceus_out_permit -j RETURN
+
+# END - OUTGOING PERCEUS
+#
+######################################################################

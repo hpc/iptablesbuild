@@ -1,0 +1,24 @@
+######################################################################
+#
+# BEGIN - OUTGOING FTP
+#
+# OUTBOUND FTP (File Transfer protocol).
+#
+# 20:	ftp data
+# 21:	ftp
+# 662:	pftp (port-ftp)
+
+-A OUTPUT -p tcp --dport 21 -j ftp_out_permit
+-A OUTPUT -p udp --dport 21 -j ftp_out_permit
+-A OUTPUT -p tcp --dport 20 -j ftp_out_permit
+-A OUTPUT -p udp --dport 20 -j ftp_out_permit
+-A OUTPUT -p tcp --dport 662 -j ftp_out_permit
+-A OUTPUT -p udp --dport 662 -j ftp_out_permit
+
+-A ftp_out_permit -d @ftp_out_permit -j ACCEPT
+-A ftp_out_permit -m limit --limit 15/h --limit-burst 5 -j LOG --log-prefix "IPTABLES FTP-OUT: "
+-A ftp_out_permit -j DROP
+
+# END - OUTGOING FTP 
+#
+######################################################################

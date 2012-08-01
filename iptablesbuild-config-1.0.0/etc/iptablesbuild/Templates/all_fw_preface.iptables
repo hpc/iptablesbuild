@@ -1,0 +1,17 @@
+######################################################################
+#
+# BEGIN - FORWARDING PREFACE
+#
+# This section is executed BEFORE all other FORWARDING traffic rules.
+
+*filter
+
+:FORWARD DROP [0:0]
+:@TemplateList_FORWARD - [0:0]
+
+#
+#
+
+# END - FORWARDINGING PREFACE
+#
+######################################################################

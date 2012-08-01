@@ -1,0 +1,12 @@
+######################################################################
+#
+# BEGIN - OUTGOING PREFACE
+#
+# This section is executed BEFORE all other OUTGOING traffic rules.
+
+# Accept all outgoing traffic on the loopback device
+-A OUTPUT -o lo -j ACCEPT
+
+# END - OUTGOING PREFACE
+#
+######################################################################

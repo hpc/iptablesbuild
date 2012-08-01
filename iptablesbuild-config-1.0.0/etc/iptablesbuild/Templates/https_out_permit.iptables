@@ -1,0 +1,15 @@
+##############################################
+# HTTPS OUTGOING
+#
+
+#Https chain access
+-A OUTPUT -p tcp -m tcp --dport 443 -j https_out_permit
+
+### SUPPORT SERVICES ###
+#
+-A https_out_permit -d @https_out_permit -j ACCEPT
+
+# Log and drop httpd attempts from other hosts
+-A https_out_permit -m limit --limit 15/h --limit-burst 5 -j LOG --log-prefix "IPTABLES out https-attempt: "
+-A https_out_permit -j DROP
+

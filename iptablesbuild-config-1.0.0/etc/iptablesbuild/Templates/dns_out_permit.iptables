@@ -1,0 +1,17 @@
+######################################################################
+#
+# BEGIN - OUTBOUND DNS
+#
+# OUTGOING DNS (Domain Name Service).
+#
+
+-A OUTPUT -p tcp --dport 53 -j dns_out_permit
+-A OUTPUT -p udp --dport 53 -j dns_out_permit
+
+-A dns_out_permit -d @dns_out_permit -j ACCEPT
+-A dns_out_permit -m limit --limit 15/h --limit-burst 5 -j LOG --log-prefix "IPTABLES DNS-OUT: "
+-A dns_out_permit -j DROP
+
+# END - OUTBOUND DNS
+#
+######################################################################
