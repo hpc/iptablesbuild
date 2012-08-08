@@ -1,0 +1,34 @@
+######################################################################
+#
+# BEGIN - OUTGOING POSTSCRIPT
+#
+# This section is executed AFTER all other OUTGOING traffic rules.
+
+
+# ACCEPT all further traffic
+-A OUTPUT -j ACCEPT
+
+### LOGGING ###
+#
+# LOG and DROP remaining udp traffic
+-A OUTPUT -p udp -m limit --limit 15/h --limit-burst 5 -j LOG --log-prefix "IPTABLES UDP-OUT: "
+-A OUTPUT -p udp -j DROP
+#
+# LOG and DROP remaining icmp traffic
+-A OUTPUT -p icmp -m limit --limit 15/h --limit-burst 5 -j LOG --log-prefix "IPTABLES ICMP-OUT: "
+-A OUTPUT -p icmp -j DROP
+#
+# LOG and DROP remaining tcp traffic
+-A OUTPUT -p tcp -m limit --limit 15/h --limit-burst 5 -j LOG --log-prefix "IPTABLES TCP-OUT: "
+-A OUTPUT -p tcp -j DROP
+#
+# LOG and DROP remaining unknown traffic
+-A OUTPUT -m limit --limit 15/h --limit-burst 5 -j LOG --log-prefix "IPTABLES PROTOCOL-X-OUT: "
+-A OUTPUT -j DROP
+
+# Load all the accumulated rules into the kernel
+COMMIT
+
+# END - OUTGOING POSTSCRIPT
+#
+######################################################################

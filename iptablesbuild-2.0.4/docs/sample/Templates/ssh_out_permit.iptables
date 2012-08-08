@@ -1,0 +1,11 @@
+######################################################################
+#
+# BEGIN - OUTGOING SSH 
+#
+# OUTGOING traffic related to SSH.
+
+-A OUTPUT -d @ssh_out_permit -p tcp -m tcp --dport 22 --tcp-flags FIN,SYN,RST,ACK SYN -m state --state NEW -j ACCEPT
+
+# END - OUTGOING SSH 
+#
+######################################################################

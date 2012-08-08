@@ -1,0 +1,11 @@
+############################################################################
+# Subversion Outgoing
+
+#Chain Access
+-A OUTPUT -p tcp -m tcp --dport 3690 -j subversion_out_permit
+
+#Chain Rules
+-A subversion_out_permit -d @mysql_out_permit -j ACCEPT
+-A subversion_out_permit -m limit --limit 15/h --limit-burst 5 -j LOG --log-prefix "IPTABLES Out subv-attempt:" 
+-A subversion_out_permit -j DROP
+

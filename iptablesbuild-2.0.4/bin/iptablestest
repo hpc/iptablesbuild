@@ -1,0 +1,255 @@
+#!%perl%
+# Copyright (c) 2011-2012 Los Alamos National Security, LLC. All rights reserved.
+
+# This program was prepared by Los Alamos National Security, LLC at Los Alamos 
+# National Laboratory (LANL) under contract No. DE-AC52-06NA25396 with the U.S. 
+# Department of Energy (DOE). All rights in the program are reserved by the DOE and 
+# Los Alamos National Security, LLC.  Permission is granted to the public to copy and
+# use this software without charge, provided that this Notice and any statement of 
+# authorship are reproduced on all copies.  Neither the U.S. Government nor LANS 
+# makes any warranty, express or implied, or assumes any liability or responsibility 
+# for the use of this software.
+#
+# @author Graham Van Heule
+#
+##### iptablestest
+# Runs some basic checks to ensure the iptables config file is valid.
+# Note: This only checks for basic mistakes, not a full syntax check.
+
+use Getopt::Long qw(:config no_ignore_case require_order);
+
+$verbose =0;
+$version="2.0.4";
+
+$opt_version = undef;
+$opt_help = undef;
+$opt_template = undef;
+GetOptions(
+	'version|V'	=> \$opt_version,
+	'verbose|v'	=> \$opt_verbose,
+	'template|v'	=> \$opt_template,
+	'help|h'	=> \$opt_help
+);
+if (!(defined $ARGV[0]) || $ARGV[0] eq "-h") {
+	print "iptablestest <options> <file>\n";
+	print "options:\n";
+	print "\t-V version: displays the current version\n";
+	print "\t-v verbose: displays more information about errors found\n";
+	print "\t-t template: use for testing a template as opposed to a normal iptables config file\n";
+	print "\t-h help: displays this menu\n";
+	exit 1;
+}
+if (defined $opt_version) {
+	print "iptablestest v$version\n";
+	exit 0;
+}
+$file = $ARGV[0];
+
+open(file, $file);
+@Contents=<file>;
+close(file);
+
+if (defined $opt_template) {
+	$characters="abcdefghijklmnopqrstuvwxyz1234567890-+_ \n*:.\"\'\[\]\(\)/,!\@";
+}
+else {
+	$characters="abcdefghijklmnopqrstuvwxyz1234567890-+_ \n*:.\"\'\[\]\(\)/,!";
+}
+
+%chains=();
+$chains{"INPUT"}='e';
+$chains{"OUTPUT"}='e';
+$chains{"FORWARD"}='e';
+$chains{"POSTROUTING"}='e';
+$chains{"PREROUTING"}='e';
+
+%chain=();
+for ($x=0; $x <= $#Contents; $x++) {
+	if (!($Contents[$x]=~/^#/g)) {
+		$line = $x+1;
+		# Do all lines start with a -A or :?
+		if (!($Contents[$x]=~/^-A/ || $Contents[$x]=~/^:/)) {
+			if ($Contents[$x]=~/^(.)/ && !$Contents[$x]=~/^COMMIT/) {
+				$problem=1;
+				print "Error! line $line: Invalid Starting String \"$1\"\n";
+			}
+		}
+		# Ignore anything that ends with a "+" it's most likely just an interface
+		$Contents[$x]=~s/\".+\"/\"\"/ig;
+		$Contents[$x]=~s/\'.+\'/\'\'/ig;
+		# Check to make sure all source or destination flags have an ip address associated with them.
+		if ($Contents[$x]=~/(-s) / || $Contents[$x]=~/(-d) /) {
+			$flag = $1;
+			if (defined $opt_template) {
+				if (!($Contents[$x]=~/$flag \d+\.\d+\.\d+\.\d+ / || $Contents[$x]=~/$flag \d+\.\d+\.\d+\.\d+\/\d+ / || $Contents[$x]=~/\@\S+\s/)) {
+					$problem=1;
+					print "Error! line $line: ip address or variable not used for $flag statement\n";
+					if (defined $opt_verbose) {
+						print "line: \"$Contents[$x]\"\n";
+					}
+					
+				};
+			} 
+			else {
+				if (!($Contents[$x]=~/$flag \d+\.\d+\.\d+\.\d+ / || $Contents[$x]=~/$flag \d+\.\d+\.\d+\.\d+\/\d+ /)) {
+					$line = $x+1;
+					$problem=1;
+					print "Error! line $line: ip address not used for $1 statement\n";
+					if (defined $opt_verbose) {
+						print "line: \"$Contents[$x]\"\n";
+					}
+				}
+			};
+		}
+		if ($Contents[$x]=~/-A\s(\S+)\s/) {
+			my $aChain=$1;
+			if ($aChain eq "INPUT") {
+				if ($Contents[$x]=~/-j\s+(\S+)\s/) {
+					$chains{$1}.="i";
+				};
+				if ($Contents[$x]=~/-o /) {
+					$problem=1;
+					print "Error! line $line: The -i flag cannot be used within the output chain.\n";
+				}
+				if ($Contents[$x]=~/-d /) {
+					$problem=1;
+					print "Warning! line $line: The -d is used to define a destination. This usually doesn't matter for an input chain. Are you sure you didn't intend to use -s?\n";
+				}
+			}
+			elsif ($aChain eq "OUTPUT") {
+				if ($Contents[$x]=~/-j\s+(\S+)\s/) {
+					$chains{$1}.="o";
+					if ($1 =~/syn-flood/i) {
+						print "syn-flood: $Contents[$x]\n";
+					};
+				};
+				if ($Contents[$x]=~/-i /) {
+					$problem=1;
+					print "Error! line $line: The -i flag cannot be used within the output chain.\n";
+				}
+				if ($Contents[$x]=~/-s /) {
+					$problem=1;
+					print "Warning! line $line: The -s is used to define a source. This usually doesn't matter for an output chain. Are you sure you didn't intend to use -d?\n";
+				}
+			}
+			else {
+				if ($Contents[$x]=~/-j\s+(\S+)\s/) {
+					$chains{$1}.="e";
+				};
+			};
+		};
+		# Check to see if any invalid characters exist in the iptables config file.
+		@letter=split("", $Contents[$x]);
+		for ($y=0; $y <= $#letter; $y++) {
+			#print $letter[$y];
+		
+			$letter[$y]=~s/\*/\\\*/g;
+			$letter[$y]=~s/\./\\\./g;
+			$letter[$y]=~s/\]/\\\]/g;
+			$letter[$y]=~s/\[/\\\[/g;
+			$letter[$y]=~s/\)/\\\)/g;
+			$letter[$y]=~s/\(/\\\(/g;
+			$letter[$y]=~s/\+/\\+/g;
+			if (!("$characters"=~/.*$letter[$y].*/ig)) {
+				$line = $x+1;
+				$problem=1;
+				print "Error! line $line: Illegal character \"$letter[$y]\".\n";
+				if (defined $opt_verbose) {
+					print "line: \"$Contents[$x]\"\n";
+				}
+				
+			}
+			
+		}
+		if  ($Contents[$x]=~/^:(\S+)\s/) {
+			$nChain=$1;
+			if ($chain{$nChain} != 1) {
+				$chain{$nChain}=1;
+			}
+			else {
+				print "Error! line $line: $nChain has been defined twice!\n";
+			};
+		};
+	}
+}
+for ($x=0; $x <= $#Contents; $x++) {
+	if (!($Contents[$x]=~/^#/g)) {
+		$line = $x+1;
+		if ($Contents[$x]=~/-A\s+(\S+)\s/) {
+			$aChain=$1;
+			if (!($chains{$aChain}=~/o/i || $chains{$aChain}=~/e/i)) {
+				if ($Contents[$x]=~/-o /) {
+					$problem=1;
+					print "Error! line $line: The -o flag does not function unless this chain uses the output chain.\n";
+				};
+				if ($Contents[$x]=~/-d /) {
+					$problem=1;
+					print "Warning! line $line: The -d is used to define a destination. This usually doesn't matter for an input chain. Are you sure you didn't intend to use -s?\n";
+				};
+			};
+			if (!($chains{$aChain}=~/i/i || $chains{$aChain}=~/e/i)) {
+				if ($Contents[$x]=~/-i /) {
+					$problem=1;
+					print "Error! line $line: The -i flag does not function unless this chain uses the input chain.\n";
+				};
+				if ($Contents[$x]=~/-s /) {
+					$problem=1;
+					print "Warning! line $line: The -s is used to define a source. This usually doesn't matter for an output chain. Are you sure you didn't intend to use -d?\n";
+				};
+			};
+			if ($chains{$aChain}=~/i/i && $chains{$aChain}=~/o/i) {
+				$problem=1;
+				print "Warning! line $line: chain $aChain recieves traffic from both OUTPUT and INPUT chains. This may be undesirable...\n";
+			};
+				
+		};
+	};
+};
+print "\n\n";
+if ($problem ==1) {
+	print "Potential problems detected. Please see above\n";
+}
+else {
+	print "$file looks good.\n";
+}
+
+# Documentation
+
+=pod
+
+=head1 NAME
+
+B<iptablestest> - checks an existing iptables configuration for problems
+
+
+=head1 SYNOPSIS
+
+ B<iptablestest> [options] [file]
+
+=head1 DESCRIPTION
+
+B<iptablestest> checks an existing iptables configuration file for common problems. Note that this does not do a full syntax check.
+
+=head1 OPTIONS
+
+=over 4
+
+=item B<-v|--version>
+
+Displays version information
+
+=item B<-c|--config <config>> 
+
+Specify an alternate config file
+
+=item B<-h|--help>
+
+Displays help messages
+
+=head1 EXAMPLES
+
+iptablescheck /etc/sysconfig/iptables - runs a check on the file /etc/sysconfig/iptables
+
+=head1 SEE
+
+=item B iptablesbuild, iptablesbuild.conf

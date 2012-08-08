@@ -1,0 +1,13 @@
+######################################################################
+#
+# BEGIN - INCOMING DHCP/TFTP 
+#
+# INCOMING traffic related to the Dynamic Host Configuration Protocol (DHCP)
+# and Trivial File Transfer Protocol (TFTP) services.
+
+-A INPUT -p udp -m udp --dport 67:69 -j ACCEPT
+-A INPUT -p tcp -m tcp --dport 67:69 -j ACCEPT
+
+# END - INCOMING DHCP/TFTP 
+#
+######################################################################

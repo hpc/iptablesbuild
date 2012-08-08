@@ -1,0 +1,16 @@
+######################################################################
+#
+# BEGIN - OUTGOING SLURM
+#
+# INCOMING traffic related to SLURM clients services. 
+# Allows interactive jobs to function.
+
+-A OUTPUT -p tcp -m tcp --dport 32768:61000 -j slurm_out_permit
+-A OUTPUT -p tcp -m tcp --dport 7321 -j slurm_out_permit
+
+-A slurm_out_permit -d @slurm_out_permit -j ACCEPT
+-A slurm_out_permit -j RETURN
+
+# END - OUTGOING SLURM
+#
+######################################################################

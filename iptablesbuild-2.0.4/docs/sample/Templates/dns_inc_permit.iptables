@@ -1,0 +1,17 @@
+######################################################################
+#
+# BEGIN - INCOMING DNS
+#
+# INBOUND DNS (Domain Name Service).
+#
+
+-A INPUT -p tcp --dport 53 -j dns_inc_permit
+-A INPUT -p udp --dport 53 -j dns_inc_permit
+
+-A dns_inc_permit -s @dns_inc_permit -j ACCEPT
+-A dns_inc_permit -m limit --limit 15/h --limit-burst 5 -j LOG --log-prefix "IPTABLES DNS-INC: "
+-A dns_inc_permit -j DROP
+
+# END - INCOMING DNS
+#
+######################################################################

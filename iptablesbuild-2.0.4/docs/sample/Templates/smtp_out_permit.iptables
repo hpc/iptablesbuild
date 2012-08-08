@@ -1,0 +1,20 @@
+######################################################################
+#
+# BEGIN - OUTGOING SMTP 
+#
+# OUTGOING traffic related to Simple Mail Transfer Protocol (SMTP)
+# services, AKA email.
+
+# Chain Access
+-A OUTPUT -p tcp -m tcp --dport 25 -j smtp_out_permit
+
+# Chain Rules
+-A smtp_out_permit -d @smtp_out_permit -j ACCEPT
+#
+# LOG and DROP attempts from other hosts
+-A smtp_out_permit -m limit --limit 15/h --limit-burst 5 -j LOG --log-prefix "IPTABLES SMTP-OUT: "
+-A smtp_out_permit -j DROP
+
+# END - OUTGOING SMTP 
+#
+######################################################################
