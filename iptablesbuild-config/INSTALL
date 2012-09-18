@@ -1,3 +1,4 @@
+
 # Copyright (c) 2011-2012 Los Alamos National Security, LLC. All rights reserved.
 
 # This program was prepared by Los Alamos National Security, LLC at Los Alamos 
@@ -10,10 +11,6 @@
 # for the use of this software.
 #
 # @author Graham Van Heule
-#
-
-
-iptablesbuild installation instructions:
 
 Basic Installation:
 
@@ -21,14 +18,10 @@ perl install.pl
 
 
 Advanced options (for install.pl):
---conf - Defines the Configuration directory (Default is /etc
---bin - Defines the place to put the Binaries (Default is /usr/sbin)
---perl - Defines the location of the perl binary (Default is /usr/bin/perl)
---docs - Defines where to place the domumentation for iptablesbuild into (Default is /usr/share/doc)
---root - Defines a chroot directory to install into (Default is /)
+Options:
+--conf - Defines the Configuration directory (Default is /etc)
 
 
+Help:
 
-# Help
-
-Please Contact: Graham Van Heule (grahamvh@lanl.gov)
+Contact: Graham Van Heule (grahamvh@lanl.gov)
