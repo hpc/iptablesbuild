@@ -1,0 +1,15 @@
+######################################################################
+#
+# BEGIN - INCOMING NTP  
+#
+# INCOMING traffic related to Network Time Protocol (NTP).
+
+-A INPUT -p udp -m udp --dport 123 -j ntp_inc_permit
+
+-A ntp_inc_permit -s @ntp_inc_permit -j ACCEPT
+-A ntp_inc_permit -m limit --limit 15/h --limit-burst 5 -j LOG --log-prefix "IPTABLES NTP-IN:" 
+-A ntp_inc_permit -j DROP
+
+# END - INCOMING NTP 
+#
+######################################################################

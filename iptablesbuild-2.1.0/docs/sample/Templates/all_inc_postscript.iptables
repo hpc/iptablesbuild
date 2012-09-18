@@ -1,0 +1,42 @@
+######################################################################
+#
+# BEGIN - INCOMING POSTSCRIPT
+#
+# This section is executed AFTER all other INCOMING traffic rules.
+
+### FRAGMENTS ###
+#
+#
+# log & DROP fragments
+-A INPUT -f -m limit --limit 15/h --limit-burst 5 -j LOG --log-prefix "IPTABLES FRAGMENTS: "
+-A INPUT -f -j DROP
+
+#
+# SSH INPUT Rules
+-A INPUT -p tcp -m tcp -m multiport --port 22 -m state --state NEW -s @ssh_inc_permit -j ACCEPT
+#
+# icmp
+-A INPUT -p icmp -m state --state NEW -s @icmp_inc_permit -j ACCEPT
+
+
+### LOGGING ###
+#
+# LOG and DROP remaining udp traffic
+-A INPUT -p udp -m limit --limit 15/h --limit-burst 5 -j LOG --log-prefix "IPTABLES UDP-IN: "
+-A INPUT -p udp -j DROP
+#
+# LOG and DROP remaining icmp traffic
+-A INPUT -p icmp -m limit --limit 15/h --limit-burst 5 -j LOG --log-prefix "IPTABLES ICMP-IN: "
+-A INPUT -p icmp -j DROP
+#
+# LOG and DROP remaining tcp traffic
+-A INPUT -p tcp -m limit --limit 15/h --limit-burst 5 -j LOG --log-prefix "IPTABLES TCP-IN: "
+-A INPUT -p tcp -j DROP
+#
+# LOG and DROP remaining unknown traffic
+-A INPUT -m limit --limit 15/h --limit-burst 5 -j LOG --log-prefix "IPTABLES PROTOCOL-X-IN: "
+-A INPUT -j DROP
+
+# END - INCOMING POSTSCRIPT
+#
+######################################################################

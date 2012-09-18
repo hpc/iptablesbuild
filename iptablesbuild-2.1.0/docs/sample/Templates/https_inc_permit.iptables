@@ -1,0 +1,15 @@
+##############################################
+# HTTPS INCOMING
+#
+
+#Https chain access
+-A INPUT -p tcp -m tcp --dport 443 -j https_inc_permit
+
+### SUPPORT SERVICES ###
+#
+-A https_inc_permit -s @https_inc_permit -j ACCEPT
+
+# Log and drop httpd attempts from other hosts
+-A https_inc_permit -m limit --limit 15/h --limit-burst 5 -j LOG --log-prefix "IPTABLES inc https-attempt: "
+-A https_inc_permit -j DROP
+

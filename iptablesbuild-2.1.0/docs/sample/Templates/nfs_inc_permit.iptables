@@ -1,0 +1,16 @@
+######################################################################
+#
+# BEGIN - INCOMING NFS
+#
+# INCOMING traffic related to NFS servers. 
+# Allows interactive jobs to function.
+
+-A INPUT -p tcp -m tcp --dport 32768:61000 -j nfs_inc_permit
+-A INPUT -p tcp -m tcp --dport 2049 -j nfs_inc_permit
+
+-A nfs_inc_permit -s @nfs_inc_permit -j ACCEPT
+-A nfs_inc_permit -j RETURN
+
+# END - INCOMING NFS
+#
+######################################################################

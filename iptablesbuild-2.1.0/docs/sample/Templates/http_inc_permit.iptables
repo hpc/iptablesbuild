@@ -1,0 +1,18 @@
+######################################################################
+#
+# BEGIN - INCOMING HTTP
+#
+# INCOMING traffic related to HTTP
+
+-A INPUT -p tcp -m tcp -m multiport --dports 80 -j http_inc_permit
+
+# Chain Rules
+-A http_inc_permit -s @http_inc_permit -j ACCEPT
+
+# LOG and DROP attempts from other hosts
+-A http_inc_permit -m limit --limit 15/h --limit-burst 5 -j LOG --log-prefix "IPTABLES HTTP-IN: "
+-A http_inc_permit -j DROP
+
+# END - INCOMING HTTP/HTTPS
+#
+######################################################################
