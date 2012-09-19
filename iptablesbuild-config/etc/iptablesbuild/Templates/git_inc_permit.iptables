@@ -1,0 +1,17 @@
+######################################################################
+#
+# BEGIN - INCOMING GIT 
+#
+# INCOMING traffic related to git repos.
+
+-A INPUT -p tcp -m tcp --dport 9418 -j git_inc_permit
+
+-A git_inc_permit -s @git_inc_permit -j ACCEPT
+
+# Log and Drop all others
+-A git_inc_permit -m limit --limit 15/h --limit-burst 5 -j LOG --log-prefix "IPTABLES GIT-IN:"
+-A git_inc_permit -j DROP
+
+# END - INCOMING GIT
+#
+######################################################################

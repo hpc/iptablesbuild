@@ -5,6 +5,18 @@
 # INCOMING traffic related to the Dynamic Host Configuration Protocol (DHCP)
 # and Trivial File Transfer Protocol (TFTP) services.
 
+-A INPUT -p udp -m udp --dport 67:68 -j ACCEPT
+-A INPUT -p tcp -m tcp --dport 67:68 -j ACCEPT
+
+-A INPUT -p tcp -m tcp --dport 69 -j dhcp_tftp_inc_permit
+-A INPUT -p tcp -m tcp --dport 69 -j dhcp_tftp_inc_permit
+
+### SUPPORT SERVICES (CM servers only) ###
+-A dhcp_tftp_inc_permit -s @CM_support_servers -j ACCEPT
+
+### CLUSTERS (CM servers only) ###
+-A dhcp_tftp_inc_permit -s @CM_clusters -j ACCEPT
+
 -A INPUT -p udp -m udp --dport 67:69 -j ACCEPT
 -A INPUT -p tcp -m tcp --dport 67:69 -j ACCEPT
 

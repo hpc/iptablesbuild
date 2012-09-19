@@ -1,0 +1,15 @@
+######################################################################
+#
+# BEGIN - INCOMING SLURMDBD
+#
+# INCOMING traffic related to SLURMDBD.
+# Allows SLURM accounting to work.
+
+-A INPUT -p tcp -m tcp --dport 6819 -j slurmdbd_inc_permit
+
+-A slurmdbd_inc_permit -s @slurmdbd_inc_permit -j ACCEPT
+-A slurmdbd_inc_permit -j RETURN
+
+# END - INCOMING SLURMDBD
+#
+######################################################################

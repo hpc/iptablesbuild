@@ -1,0 +1,15 @@
+######################################################################
+#
+# BEGIN - INCOMING X Windows Communication
+#
+# INCOMING traffic related forwarding X sessions. 
+#
+
+-A INPUT -p tcp -m tcp --dport 6000:6200 -j xwindows_inc_permit
+
+-A xwindows_inc_permit -s @xwindows_inc_permit -j ACCEPT
+-A xwindows_inc_permit -j RETURN 
+
+# END - INCOMING X Windows
+#
+######################################################################
