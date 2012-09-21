@@ -19,7 +19,7 @@
 use Getopt::Long qw(:config no_ignore_case require_order);
 
 $verbose =0;
-$version="2.1.0";
+$version="2.1.1-pre1";
 
 $opt_version = undef;
 $opt_help = undef;
@@ -45,176 +45,197 @@ if (defined $opt_version) {
 	exit 0;
 }
 
+my @files =();
+# ARGV[0] is the file we will be looking through
+foreach my $file (@ARGV) {
+	my @list = `ls $file`;
+	@files=(@files,@list);
+}	
 
-# set arg0 to the 
-$file = $ARGV[0];
 
-open(file, $file);
-@Contents=<file>;
-close(file);
 
-if (defined $opt_template) {
-	$characters="abcdefghijklmnopqrstuvwxyz1234567890-+_ \n*:.\"\'\[\]\(\)/,!\@";
-}
-else {
-	$characters="abcdefghijklmnopqrstuvwxyz1234567890-+_ \n*:.\"\'\[\]\(\)/,!";
-}
+foreach my $file (@files) {
+	$file=~s/\n//ig;
+	print "#################\n";
+	print "# Checking $file\n";
+	open(file, $file) or die "Error! Could not open $file\n";
+	my @Contents=<file>;
+	close(file);
 
-%chains=();
-$chains{"INPUT"}='e';
-$chains{"OUTPUT"}='e';
-$chains{"FORWARD"}='e';
-$chains{"POSTROUTING"}='e';
-$chains{"PREROUTING"}='e';
+	if (defined $opt_template) {
+		$characters="abcdefghijklmnopqrstuvwxyz1234567890-+_ \n*:.\"\'\[\]\(\)/,!\@";
+	}
+	else {
+		$characters="abcdefghijklmnopqrstuvwxyz1234567890-+_ \n*:.\"\'\[\]\(\)/,!";
+	}
 
-%chain=();
-for ($x=0; $x <= $#Contents; $x++) {
-	if (!($Contents[$x]=~/^#/g)) {
-		$line = $x+1;
-		# Do all lines start with a -A or :?
-		if (!($Contents[$x]=~/^-A/ || $Contents[$x]=~/^:/)) {
-			if ($Contents[$x]=~/^(.)/ && !$Contents[$x]=~/^COMMIT/) {
-				$problem=1;
-				print "Error! line $line: Invalid Starting String \"$1\"\n";
-			}
-		}
-		# Ignore anything that ends with a "+" it's most likely just an interface
-		$Contents[$x]=~s/\".+\"/\"\"/ig;
-		$Contents[$x]=~s/\'.+\'/\'\'/ig;
-		# Check to make sure all source or destination flags have an ip address associated with them.
-		if ($Contents[$x]=~/(-s) / || $Contents[$x]=~/(-d) /) {
-			$flag = $1;
-			if (defined $opt_template) {
-				if (!($Contents[$x]=~/$flag \d+\.\d+\.\d+\.\d+ / || $Contents[$x]=~/$flag \d+\.\d+\.\d+\.\d+\/\d+ / || $Contents[$x]=~/\@\S+\s/)) {
+	# Does some basic setup. These chains are enabled by default.
+	my %chains=();
+	$chains{"INPUT"}='e';
+	$chains{"OUTPUT"}='e';
+	$chains{"FORWARD"}='e';
+	$chains{"POSTROUTING"}='e';
+	$chains{"PREROUTING"}='e';
+
+	my %chain=();
+
+	my $problem = 0;
+	for ($x=0; $x <= $#Contents; $x++) {
+		if (!($Contents[$x]=~/^#/g)) {
+			$line = $x+1;
+			# Do all lines start with a "-A" or ":"?
+			if (!($Contents[$x]=~/^-A/ || $Contents[$x]=~/^:/)) {
+				if ($Contents[$x]=~/^(.)/ && !$Contents[$x]=~/^COMMIT/) {
 					$problem=1;
-					print "Error! line $line: ip address or variable not used for $flag statement\n";
+					print "Error! line $line: Invalid Starting String \"$1\"\n";
+				}
+			}
+			# Ignore anything that ends with a "+" it's most likely just an interface
+			$Contents[$x]=~s/\".+\"/\"\"/ig;
+			$Contents[$x]=~s/\'.+\'/\'\'/ig;
+			# Check to make sure all source or destination flags have an ip address associated with them.
+			if ($Contents[$x]=~/(-s) / || $Contents[$x]=~/(-d) /) {
+				$flag = $1;
+				if (defined $opt_template) {
+					if (!($Contents[$x]=~/$flag \d+\.\d+\.\d+\.\d+ / || $Contents[$x]=~/$flag \d+\.\d+\.\d+\.\d+\/\d+ / || $Contents[$x]=~/\@\S+\s/)) {
+						$problem=1;
+						print "Error! line $line: ip address or variable not used for $flag statement\n";
+						if (defined $opt_verbose) {
+							print "line: \"$Contents[$x]\"\n";
+						}
+						
+					};
+				} 
+				else {
+					if (!($Contents[$x]=~/$flag \d+\.\d+\.\d+\.\d+ / || $Contents[$x]=~/$flag \d+\.\d+\.\d+\.\d+\/\d+ /)) {
+						$line = $x+1;
+						$problem=1;
+						print "Error! line $line: ip address not used for $1 statement\n";
+						if (defined $opt_verbose) {
+							print "line: \"$Contents[$x]\"\n";
+						}
+					}
+				};
+			}
+	
+			# Checks to make sure the -d or -s flag makes sense with the chain being used.
+			if ($Contents[$x]=~/-A\s(\S+)\s/) {
+				my $aChain=$1;
+				if ($aChain eq "INPUT") {
+					if ($Contents[$x]=~/-j\s+(\S+)\s/) {
+						$chains{$1}.="i";
+					};
+					if ($Contents[$x]=~/-o /) {
+						$problem=1;
+						print "Error! line $line: The -i flag cannot be used within the output chain.\n";
+					}
+					if ($Contents[$x]=~/-d /) {
+						$problem=1;
+						print "Warning! line $line: The -d is used to define a destination. This usually doesn't matter for an input chain. Are you sure you didn't intend to use -s?\n";
+					}
+				}
+				elsif ($aChain eq "OUTPUT") {
+					if ($Contents[$x]=~/-j\s+(\S+)\s/) {
+						$chains{$1}.="o";
+						if ($1 =~/syn-flood/i) {
+							print "syn-flood: $Contents[$x]\n";
+						};
+					};
+					if ($Contents[$x]=~/-i /) {
+						$problem=1;
+						print "Error! line $line: The -i flag cannot be used within the output chain.\n";
+					}
+					if ($Contents[$x]=~/-s /) {
+						$problem=1;
+						print "Warning! line $line: The -s is used to define a source. This usually doesn't matter for an output chain. Are you sure you didn't intend to use -d?\n";
+					}
+				}
+				else {
+					if ($Contents[$x]=~/-j\s+(\S+)\s/) {
+							$chains{$1}.="e";
+					};
+				};
+			};
+			# Check to see if any invalid characters exist in the iptables config file.
+			@letter=split("", $Contents[$x]);
+			for ($y=0; $y <= $#letter; $y++) {
+				#print $letter[$y];
+			
+				$letter[$y]=~s/\*/\\\*/g;
+				$letter[$y]=~s/\./\\\./g;
+				$letter[$y]=~s/\]/\\\]/g;
+				$letter[$y]=~s/\[/\\\[/g;
+				$letter[$y]=~s/\)/\\\)/g;
+				$letter[$y]=~s/\(/\\\(/g;
+				$letter[$y]=~s/\+/\\+/g;
+				if (!("$characters"=~/.*$letter[$y].*/ig)) {
+					$line = $x+1;
+					$problem=1;
+					print "Error! line $line: Illegal character \"$letter[$y]\".\n";
 					if (defined $opt_verbose) {
 						print "line: \"$Contents[$x]\"\n";
 					}
 					
-				};
-			} 
-			else {
-				if (!($Contents[$x]=~/$flag \d+\.\d+\.\d+\.\d+ / || $Contents[$x]=~/$flag \d+\.\d+\.\d+\.\d+\/\d+ /)) {
-					$line = $x+1;
-					$problem=1;
-					print "Error! line $line: ip address not used for $1 statement\n";
-					if (defined $opt_verbose) {
-						print "line: \"$Contents[$x]\"\n";
-					}
-				}
-			};
-		}
-		if ($Contents[$x]=~/-A\s(\S+)\s/) {
-			my $aChain=$1;
-			if ($aChain eq "INPUT") {
-				if ($Contents[$x]=~/-j\s+(\S+)\s/) {
-					$chains{$1}.="i";
-				};
-				if ($Contents[$x]=~/-o /) {
-					$problem=1;
-					print "Error! line $line: The -i flag cannot be used within the output chain.\n";
-				}
-				if ($Contents[$x]=~/-d /) {
-					$problem=1;
-					print "Warning! line $line: The -d is used to define a destination. This usually doesn't matter for an input chain. Are you sure you didn't intend to use -s?\n";
-				}
-			}
-			elsif ($aChain eq "OUTPUT") {
-				if ($Contents[$x]=~/-j\s+(\S+)\s/) {
-					$chains{$1}.="o";
-					if ($1 =~/syn-flood/i) {
-						print "syn-flood: $Contents[$x]\n";
-					};
-				};
-				if ($Contents[$x]=~/-i /) {
-					$problem=1;
-					print "Error! line $line: The -i flag cannot be used within the output chain.\n";
-				}
-				if ($Contents[$x]=~/-s /) {
-					$problem=1;
-					print "Warning! line $line: The -s is used to define a source. This usually doesn't matter for an output chain. Are you sure you didn't intend to use -d?\n";
-				}
-			}
-			else {
-				if ($Contents[$x]=~/-j\s+(\S+)\s/) {
-					$chains{$1}.="e";
-				};
-			};
-		};
-		# Check to see if any invalid characters exist in the iptables config file.
-		@letter=split("", $Contents[$x]);
-		for ($y=0; $y <= $#letter; $y++) {
-			#print $letter[$y];
-		
-			$letter[$y]=~s/\*/\\\*/g;
-			$letter[$y]=~s/\./\\\./g;
-			$letter[$y]=~s/\]/\\\]/g;
-			$letter[$y]=~s/\[/\\\[/g;
-			$letter[$y]=~s/\)/\\\)/g;
-			$letter[$y]=~s/\(/\\\(/g;
-			$letter[$y]=~s/\+/\\+/g;
-			if (!("$characters"=~/.*$letter[$y].*/ig)) {
-				$line = $x+1;
-				$problem=1;
-				print "Error! line $line: Illegal character \"$letter[$y]\".\n";
-				if (defined $opt_verbose) {
-					print "line: \"$Contents[$x]\"\n";
 				}
 				
 			}
-			
-		}
-		if  ($Contents[$x]=~/^:(\S+)\s/) {
-			$nChain=$1;
-			if ($chain{$nChain} != 1) {
-				$chain{$nChain}=1;
-			}
-			else {
-				print "Error! line $line: $nChain has been defined twice!\n";
-			};
-		};
-	}
-}
-for ($x=0; $x <= $#Contents; $x++) {
-	if (!($Contents[$x]=~/^#/g)) {
-		$line = $x+1;
-		if ($Contents[$x]=~/-A\s+(\S+)\s/) {
-			$aChain=$1;
-			if (!($chains{$aChain}=~/o/i || $chains{$aChain}=~/e/i)) {
-				if ($Contents[$x]=~/-o /) {
-					$problem=1;
-					print "Error! line $line: The -o flag does not function unless this chain uses the output chain.\n";
-				};
-				if ($Contents[$x]=~/-d /) {
-					$problem=1;
-					print "Warning! line $line: The -d is used to define a destination. This usually doesn't matter for an input chain. Are you sure you didn't intend to use -s?\n";
+			if  ($Contents[$x]=~/^:(\S+)\s/) {
+				$nChain=$1;
+				if ($chain{$nChain} != 1) {
+					$chain{$nChain}=1;
+				}
+				else {
+					print "Error! line $line: $nChain has been defined twice!\n";
 				};
 			};
-			if (!($chains{$aChain}=~/i/i || $chains{$aChain}=~/e/i)) {
-				if ($Contents[$x]=~/-i /) {
-					$problem=1;
-					print "Error! line $line: The -i flag does not function unless this chain uses the input chain.\n";
-				};
-				if ($Contents[$x]=~/-s /) {
-					$problem=1;
-					print "Warning! line $line: The -s is used to define a source. This usually doesn't matter for an output chain. Are you sure you didn't intend to use -d?\n";
-				};
-			};
-			if ($chains{$aChain}=~/i/i && $chains{$aChain}=~/o/i) {
-				$problem=1;
-				print "Warning! line $line: chain $aChain recieves traffic from both OUTPUT and INPUT chains. This may be undesirable...\n";
-			};
-				
 		};
 	};
-};
-print "\n\n";
-if ($problem ==1) {
-	print "Potential problems detected. Please see above\n";
-}
-else {
-	print "$file looks good.\n";
+	
+	# Does a deeper check to see if all -d/-s and -o/-i match the chain being used.
+	# This requires the second loop through as the one above matches non standard 
+	#  chains to the standard chains as it passes through the config
+	for ($x=0; $x <= $#Contents; $x++) {
+		if (!($Contents[$x]=~/^#/g)) {
+			$line = $x+1;
+			if ($Contents[$x]=~/-A\s+(\S+)\s/) {
+				$aChain=$1;
+				if (!($chains{$aChain}=~/o/i || $chains{$aChain}=~/e/i)) {
+					if ($Contents[$x]=~/-o /) {
+						$problem=1;
+						print "Error! line $line: The -o flag does not function unless this chain uses the output chain.\n";
+					};
+					if ($Contents[$x]=~/-d /) {
+						$problem=1;
+						print "Warning! line $line: The -d is used to define a destination. This usually doesn't matter for an input chain. Are you sure you didn't intend to use -s?\n";
+					};
+				};
+				if (!($chains{$aChain}=~/i/i || $chains{$aChain}=~/e/i)) {
+					if ($Contents[$x]=~/-i /) {
+						$problem=1;
+						print "Error! line $line: The -i flag does not function unless this chain uses the input chain.\n";
+					};
+					if ($Contents[$x]=~/-s /) {
+						$problem=1;
+						print "Warning! line $line: The -s is used to define a source. This usually doesn't matter for an output chain. Are you sure you didn't intend to use -d?\n";
+					};
+				};
+				if ($chains{$aChain}=~/i/i && $chains{$aChain}=~/o/i) {
+					$problem=1;
+					print "Warning! line $line: chain $aChain recieves traffic from both OUTPUT and INPUT chains. This may be undesirable...\n";
+				};
+					
+			};
+		};
+	};
+
+	print "\n";
+	if ($problem ==1) {
+		print "Potential problems detected. Please see above\n";
+	}
+	else {	
+		print "$file looks good.\n";
+	}
+	print "########\n\n\n";
 }
 
 # Documentation
