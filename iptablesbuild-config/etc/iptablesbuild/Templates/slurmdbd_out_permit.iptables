@@ -7,7 +7,7 @@
 
 -A OUTPUT -p tcp -m tcp --dport 6819 -j slurmdbd_out_permit
 
--A slurmdbd_out_permit -s @slurmdbd_out_permit -j ACCEPT
+-A slurmdbd_out_permit -d @slurmdbd_out_permit -j ACCEPT
 -A slurmdbd_out_permit -j RETURN
 
 # END - OUTGOING SLURMDBD
