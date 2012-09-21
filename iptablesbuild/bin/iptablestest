@@ -30,6 +30,7 @@ GetOptions(
 	'template|v'	=> \$opt_template,
 	'help|h'	=> \$opt_help
 );
+# Help
 if (!(defined $ARGV[0]) || $ARGV[0] eq "-h") {
 	print "iptablestest <options> <file>\n";
 	print "options:\n";
@@ -43,6 +44,9 @@ if (defined $opt_version) {
 	print "iptablestest v$version\n";
 	exit 0;
 }
+
+
+# set arg0 to the 
 $file = $ARGV[0];
 
 open(file, $file);
