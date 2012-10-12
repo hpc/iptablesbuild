@@ -22,7 +22,7 @@
 use Getopt::Long;
 
 @bin_files = ("iptablesbuild", "iptablestest");
-@bin_md5s=("2bef72cfbc7296eafd0d36e0d9966ad1","79608d36d05842ebf9143be351422378");
+@bin_md5s=("e0ffbb94edab41a06c9a92dc664e38c3","b3e6a445f44bd0cacc533b2600a81b7a");
 
 
 ## Grabs the configure options

@@ -19,7 +19,7 @@
 
 use Getopt::Long qw(:config no_ignore_case require_order);
 
-$Version = "2.1.1";
+$Version = "2.1.2";
 #Config file directory
 $config="/etc/iptablesbuild/iptablesbuild.conf";
 
@@ -131,6 +131,14 @@ foreach $cFile (@cFiles) {
 		# This assigns each variable defined in the config file to a variable here. 
 		if ($conf[$x]=~/\=/ig) {
 			@arg=split("=", $conf[$x]);
+			while ($arg[0]=~/^\s/ || $arg[0]=~/\s$/) {
+				$arg[0]=~s/^\s+//ig;
+				$arg[0]=~s/\s+$//ig;
+			};
+			while ($arg[1]=~/^\s/ || $arg[1]=~/\s$/) {
+				$arg[1]=~s/^\s+//ig;
+				$arg[1]=~s/\s+$//ig;
+			};
 			Varcheck($arg[0], ($x+1), $cFile);
 			if ($cur eq "Products") {
 				if ($Product{$cur2}{$arg[0]} != undef) {
