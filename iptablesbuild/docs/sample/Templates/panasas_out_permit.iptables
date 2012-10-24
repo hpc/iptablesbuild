@@ -1,0 +1,19 @@
+######################################################################
+#
+# BEGIN - OUTGOING PANASAS
+#
+# OUTGOING traffic related to the PANASAS Realms the provides scratch spaces (ie scratch1)
+
+-A OUTPUT -p tcp -m tcp --dport 3260 -m state --state NEW,ESTABLISHED -j panasas_out_permit
+-A OUTPUT -p tcp -m tcp --dport 3095 -m state --state NEW,ESTABLISHED -j panasas_out_permit
+-A OUTPUT -p tcp -m tcp --dport 10622 -m state --state NEW,ESTABLISHED -j panasas_out_permit
+-A OUTPUT -p tcp -m tcp --sport 3260 -m state --state NEW,ESTABLISHED -j panasas_out_permit
+-A OUTPUT -p tcp -m tcp --sport 3095 -m state --state NEW,ESTABLISHED -j panasas_out_permit
+-A OUTPUT -p tcp -m tcp --sport 10622 -m state --state NEW,ESTABLISHED -j panasas_out_permit
+
+-A panasas_out_permit -d @panasas_out_permit -j ACCEPT
+-A panasas_out_permit -j RETURN
+
+# END - OUTGOING PANASAS
+#
+######################################################################

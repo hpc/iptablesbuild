@@ -19,7 +19,7 @@
 
 use Getopt::Long qw(:config no_ignore_case require_order);
 
-$Version = "2.1.2";
+$Version = "2.2.0";
 #Config file directory
 $config="/etc/iptablesbuild/iptablesbuild.conf";
 
@@ -27,6 +27,7 @@ $opt_version = undef;
 $opt_help = undef;
 $opt_config = undef;
 $opt_list = undef;
+$opt_suffix=1;
 GetOptions(
 	'version|v'	=> \$opt_version,
 	'help|h'	=> \$opt_help,
@@ -113,18 +114,20 @@ foreach $cFile (@cFiles) {
 			Varcheck($cur2, ($x+1), $conf[$x], $cFile);
 			if ($cur eq "Products" ) {
 				if (keys %{$Product{$cur2}} > 0) {
-					print STDERR "Error! System/Product Area \"$cur2\" is defined twice!\n";
+					print STDERR "Error! System/Product Area \"$cur2\" is defined twice!\n\a";
 					exit 2;
 				};
 			}
-			else {
-				if ($cur eq "Templates") {
+			elsif ($cur eq "Templates") {
 					
-					if (keys %{$Template{$cur2}} > 0) {
-						print STDERR "Error! Template \"$cur2\" is defined twice!\n";
-						exit 2;
-					};
+				if (keys %{$Template{$cur2}} > 0) {
+					print STDERR "Error! Template \"$cur2\" is defined twice!\n\a";
+					exit 2;
 				};
+			}
+			elsif ($cur eq "Config") {
+				print STDERR "Error! Config directives do not include [] groupings\n\a";
+				exit 2;
 			};
 			next;
 		};
@@ -164,35 +167,49 @@ foreach $cFile (@cFiles) {
 					};
 				};
 			}
-			else {
-				if ($cur eq "Templates") {
-					#Assigns as $Templates__<Product name>__<variable name>
-					if ($Template{$cur2}{$arg[0]} != undef) {
-						print STDERR "Warning! Template variable $arg[0] for template $cur2 is defined twice!\n";
-					};
-					$Template{$cur2}{$arg[0]}=[uniq(split(" ", $arg[1]))];
-					#print "Templates-$cur2-$arg[0]: " . join( " ", @{$Template{$cur2}{$arg[0]}}) . "\n";
-					if (${$Template{$cur2}{$arg[0]}}[0] eq "") {
-						$Template{$cur2}{$arg[0]}= [" "];
+			elsif ($cur eq "Templates") {
+				#Assigns as $Templates__<Product name>__<variable name>
+				if ($Template{$cur2}{$arg[0]} != undef) {
+					print STDERR "Warning! Template variable $arg[0] for template $cur2 is defined twice!\n";
+				};
+				$Template{$cur2}{$arg[0]}=[uniq(split(" ", $arg[1]))];
+				#print "Templates-$cur2-$arg[0]: " . join( " ", @{$Template{$cur2}{$arg[0]}}) . "\n";
+				if (${$Template{$cur2}{$arg[0]}}[0] eq "") {
+					$Template{$cur2}{$arg[0]}= [" "];
+				};
+			}
+			elsif ($cur eq "Global") {
+				#Assigns as $Global__<variable name>
+				if ($Global{$arg[0]} != undef) {
+					print STDERR "Warning! Global variable $arg[0] is defined twice!\n";
+				};
+				$Global{$arg[0]}=[uniq(split(" ", $arg[1]))];
+				#print "Global-$arg[0]: " . join(" ", @{$Global{$arg[0]}}) . "\n";
+				if (${$Global{$arg[0]}}[0] eq "") {
+					$Global{$arg[0]}= [" "];
+				};
+			}
+			elsif ($cur eq "Config") {
+				if ($arg[0] eq "suffix") {
+					if ($arg[1]=~/true/i) {
+						$opt_suffix=1;
+					}
+					elsif ($arg[1]=~/false/i) {
+						$opt_suffix=0;
+					}
+					else {
+						print SRDERR "Error! line " . ($x+1) . " in config file \"$cFile\" $arg[0] must be true or false\n";
+						exit 2;
 					};
 				}
 				else {
-					if ($cur eq "Global") {
-						#Assigns as $Global__<variable name>
-						if ($Global{$arg[0]} != undef) {
-							print STDERR "Warning! Global variable $arg[0] is defined twice!\n";
-						};
-						$Global{$arg[0]}=[uniq(split(" ", $arg[1]))];
-						#print "Global-$arg[0]: " . join(" ", @{$Global{$arg[0]}}) . "\n";
-						if (${$Global{$arg[0]}}[0] eq "") {
-							$Global{$arg[0]}= [" "];
-						};
-					}
-					else {
-						print "Error! line " . ($x+1) . " in config file \"$cFile\" not understood.\n";
-						exit 2;
-					};
-				};
+					print SRDERR "Error! line " . ($x+1) . " in config file \"$cFile\' line not understood as a config option\n\a";
+					exit 2;
+				}
+			}
+			else {
+				print STDERR "Error! line " . ($x+1) . " in config file \"$cFile\" not understood.\n";
+				exit 2;
 			};
 			next;
 		};
@@ -459,21 +476,33 @@ foreach my $curProduct (keys %Product) {
 					@Output=(@Output, @file, "\n\n");
 				};
 			};
-			#Check to see if the product area has ben defined for this product
-			if ($Product{$curProduct}{"area"} == undef) {
-				die "Error! Product \"$curProduct\" does not have an product area defined! Exiting!\n\a";
+			my $file = "";
+			if ("@{$Product{$curProduct}{file}}"=~/\S/) {
+				$file = join(" ", @{$Product{$curProduct}{file}});
+			}
+			elsif (${$Global{file}}[0]=~/\S/) {
+				$file = join(" ", @{$Global{file}});
+			}
+			else {
+				print STDERR "\nWarning file location not defined. using /tmp/iptables\n\n\a";
+				$file = "/tmp/iptables";
 			};
-			$Product{$curProduct}{"area"}[0]=~s/\s+//ig;
-			#Write to the Product area's temporary iptables file.
-			#It does this first, just in case this write process fails mid write
-			$tmp=join("", @{$Global{"product_area"}}) . join("", @{$Product{$curProduct}{"area"}}) . join("", @{$Global{"product_iptables"}});
-			open(out, "> $tmp.$curProduct") or die "Failed to open $tmp.$curProduct\n";
+			$file=~s/\s+@/@/ig;
+			$file=~s/@/ @/ig;
+			$file=~s/^\s+//ig;
+			my @tmp = split(" ", $file);
+			$file=join("", VareqVar($curProduct, @tmp));
+			if ($opt_suffix == 1) {
+				$file .= ".$curProduct";
+			};
+			$file=~s/\s//ig;
+			open(out, "> $file") or die "Failed to open $file\n";
 			for ($y=0; $y <= $#Output; $y++) {
 				print out "$Output[$y]";
 			};
 			close(out);
 			print "\nProduct $curProduct built successfully!\n";
-			print "Temporary file located at $tmp.$curProduct\n";
+			print "Temporary file located at $file\n";
 			print "Copy the iptables config over the given system's /etc/sysconfig/iptables file to install\n";
 			print "Be Sure to check to see if this config is how you want it before using!\n\n";
 
@@ -490,7 +519,7 @@ foreach my $curProduct (keys %Product) {
 #This subroutine checks for characters in the variables that are unacceptable
 sub Varcheck {
 	@letters=split( "", "$_[0]");
-	$characters="abcdefghijklmnopqrstuvwxyz1234567890ABCDEFGHIJKLMNOPQRSTUVWXYZ_-";
+	$characters="abcdefghijklmnopqrstuvwxyz1234567890ABCDEFGHIJKLMNOPQRSTUVWXYZ_-/\\";
 	for (my $x=0; $x <= $#letters; $x++) {
 		if ("$characters"=~/$letters[$x]/g) {
 		}
@@ -503,7 +532,7 @@ sub Varcheck {
 
 sub ValueCheck {
 	@letters=split( "", "$_[0]");
-	$characters="abcdefghijklmnopqrstuvwxyz1234567890ABCDEFGHIJKLMNOPQRSTUVWXYZ_ }{=-.,[]\n/#\t@";
+	$characters="abcdefghijklmnopqrstuvwxyz1234567890ABCDEFGHIJKLMNOPQRSTUVWXYZ_ }{=-.,[]\n/#\t@\\\/";
 	for (my $x=0; $x <= $#letters; $x++) {
 		if ("$characters"=~/\Q$letters[$x]\E/g) {
 		}
@@ -536,11 +565,9 @@ sub VareqVar {
 			else {
 				if ($Product{$curProduct}{$trans} != undef) {
 					@tmp = @{$Product{$curProduct}{$trans}};
-					@vals=(@vals, @tmp);
 				}
 				elsif ($Global{$trans} != undef) {
 					@tmp = @{$Global{$trans}};
-					@vals=(@vals, @tmp);
 				}
 				else {
 					print STDERR "Warning!! Variable $trans undefined!\n\a";

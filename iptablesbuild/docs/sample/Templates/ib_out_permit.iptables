@@ -1,0 +1,11 @@
+######################################################################
+#
+# BEGIN - OUTGOING IB
+#
+# OUTGOING traffic related to Infiniband.
+
+-A OUTPUT -o ib+ -j ACCEPT
+
+# END - OUTGOING IB
+#
+######################################################################

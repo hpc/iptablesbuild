@@ -1,0 +1,17 @@
+######################################################################
+#
+# BEGIN - OUTGOING GIT 
+#
+# INCOMING traffic related to git repos.
+
+-A OUTPUT -p tcp -m tcp --dport 9418 -j git_out_permit
+
+-A git_out_permit -d @git_out_permit -j ACCEPT
+
+# Log and Drop all others
+-A git_out_permit -m limit --limit 15/h --limit-burst 5 -j LOG --log-prefix "IPTABLES GIT-OUT:"
+-A git_out_permit -j DROP
+
+# END - OUTGOING GIT
+#
+######################################################################

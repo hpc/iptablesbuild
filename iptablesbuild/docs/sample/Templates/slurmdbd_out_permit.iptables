@@ -1,0 +1,15 @@
+######################################################################
+#
+# BEGIN - OUTGOING SLURMDBD
+#
+# OUTBOUND traffic related to SLURMDBD.
+# Allows SLURM accounting to work.
+
+-A OUTPUT -p tcp -m tcp --dport 6819 -j slurmdbd_out_permit
+
+-A slurmdbd_out_permit -d @slurmdbd_out_permit -j ACCEPT
+-A slurmdbd_out_permit -j RETURN
+
+# END - OUTGOING SLURMDBD
+#
+######################################################################

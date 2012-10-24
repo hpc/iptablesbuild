@@ -1,0 +1,15 @@
+######################################################################
+#
+# BEGIN - INCOMING abacus traffic 
+#
+# INCOMING traffic using the abacus license
+
+-A OUTPUT -p tcp --dport 27005 -j abacus_out_permit
+-A OUTPUT -p udp --dport 50001 -j abacus_out_permit
+
+-A abacus_out_permit -d @abacus_out_permit -j ACCEPT
+-A abacus_out_permit -j RETURN
+
+# END - INCOMING abacus traffic
+#
+####################################################################

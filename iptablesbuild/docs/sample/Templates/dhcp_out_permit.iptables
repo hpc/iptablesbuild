@@ -1,0 +1,13 @@
+######################################################################
+#
+# BEGIN - INCOMING DHCP
+#
+# INCOMING traffic related to the Dynamic Host Configuration Protocol (DHCP)
+
+-A OUTPUT -p udp -m udp --dport 67:68 -j ACCEPT
+-A OUTPUT -p tcp -m tcp --dport 67:68 -j ACCEPT
+
+
+# END - INCOMING DHCP 
+#
+######################################################################

@@ -8,6 +8,7 @@
 -A INPUT -p tcp -m tcp --dport 32768:61000 -j slurm_inc_permit
 -A INPUT -p tcp -m tcp --dport 7321 -j slurm_inc_permit
 -A INPUT -p tcp -m tcp --dport 6817 -j slurm_inc_permit
+-A INPUT -p tcp -m tcp --dport 6818 -j slurm_inc_permit
 
 -A slurm_inc_permit -s @slurm_inc_permit -j ACCEPT
 -A slurm_inc_permit -j RETURN

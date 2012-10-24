@@ -1,0 +1,19 @@
+######################################################################
+#
+# BEGIN - OUTGOING TFTP 
+#
+# OUTGOING traffic related to the Trivial File Transfer Protocol (TFTP) services.
+# This is generally used for pxeboot
+
+
+-A OUTPUT -p tcp -m tcp --dport 69 -j tftp_out_permit
+-A OUTPUT -p udp -m udp --dport 69 -j tftp_out_permit
+
+
+-A tftp_out_permit -d @tftp_out_permit -j ACCEPT
+-A tftp_out_permit -m limit --limit 15/h --limit-burst 5 -j LOG --log-prefix "IPTABLES TFTP-OUT:"
+-A tftp_out_permit -j DROP
+
+# END - OUTGOING TFTP 
+#
+######################################################################
