@@ -506,7 +506,7 @@ foreach my $curProduct (keys %Product) {
 			print "Copy the iptables config over the given system's /etc/sysconfig/iptables file to install\n";
 			print "Be Sure to check to see if this config is how you want it before using!\n\n";
 
-			my $errors= `/usr/sbin/iptablestest $tmp.$curProduct`;
+			my $errors= `/usr/sbin/iptablestest $file`;
 			if ($errors=~/error/i) {
 				print "\n\n";
 				print STDERR "Error! iptablestest found the following critical errors with the generated file:\n\a$errors\a";
