@@ -19,7 +19,7 @@
 
 use Getopt::Long qw(:config no_ignore_case require_order);
 
-$Version = "2.2.0";
+$Version = "2.2.2";
 #Config file directory
 $config="/etc/iptablesbuild/iptablesbuild.conf";
 
@@ -112,7 +112,7 @@ foreach $cFile (@cFiles) {
 			$cur2=~s/\[//ig;	
 			$cur2=~s/\]//ig;
 			Varcheck($cur2, ($x+1), $conf[$x], $cFile);
-			if ($cur eq "Products" ) {
+			if ($cur eq "Products" || $cur eq "Systems" ) {
 				if (keys %{$Product{$cur2}} > 0) {
 					print STDERR "Error! System/Product Area \"$cur2\" is defined twice!\n\a";
 					exit 2;
@@ -143,7 +143,7 @@ foreach $cFile (@cFiles) {
 				$arg[1]=~s/\s+$//ig;
 			};
 			Varcheck($arg[0], ($x+1), $cFile);
-			if ($cur eq "Products") {
+			if ($cur eq "Products" || $cur eq "Systems") {
 				if ($Product{$cur2}{$arg[0]} != undef) {
 					print STDERR "Warning! System/Product variable $arg[0] for System/Product $cur2 is defined twice!\n";
 				};

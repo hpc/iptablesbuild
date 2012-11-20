@@ -19,7 +19,7 @@
 use Getopt::Long qw(:config no_ignore_case require_order);
 
 $verbose =0;
-$version="2.2.0";
+$version="2.2.2";
 
 $opt_version = undef;
 $opt_help = undef;
@@ -90,6 +90,10 @@ foreach my $file (@files) {
 					print "Error! line $line: Invalid Starting String \"$1\"\n";
 				}
 			}
+			if ($Contents[$x]=~/^\s/ && !($Contents[$x]=~/^\n/)) {
+				$problem = 1;
+				print "Error! line $line: leading whitespace detected (ie spaces). iptables can't handle this.\n";
+			};
 			# Ignore anything that ends with a "+" it's most likely just an interface
 			$Contents[$x]=~s/\".+\"/\"\"/ig;
 			$Contents[$x]=~s/\'.+\'/\'\'/ig;
