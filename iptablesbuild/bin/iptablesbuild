@@ -19,7 +19,7 @@
 
 use Getopt::Long qw(:config no_ignore_case require_order);
 
-$Version = "2.2.2";
+$Version = "2.2.4";
 #Config file directory
 $config="/etc/iptablesbuild/iptablesbuild.conf";
 
@@ -353,7 +353,10 @@ foreach my $curProduct (keys %Product) {
 						# Remove RCS header if present
 						if ( $file[$z]=~/\$Header:/ ) {
                                         		$file[$z]="";  
-						};                                        
+						};
+						while ($file[$z]=~/^\s+\n$/i) {
+							$file[$z]=~s/^\s+\n$/\n/ig;
+						};
 						#if the current line contains a variable continue, if not go to the next line.
 						if ($file[$z]=~/\@/ig) {
 							$file[$z]=~s/\n/ \n/ig;
@@ -415,7 +418,7 @@ foreach my $curProduct (keys %Product) {
 													}
 													else {
 														if ( $host ne "") {
-															if ($lookup eq "" && !($split2[$b]=~/TemplateList/) && !($split2[$b]=~/templates/) && !($host=~/^eth\d+/ || $host=~/^bond\d+/ || $host=~/^bond\d+/ || $host=~/^em\d+/ || $host=~/^p\d+p\d+/)) {
+															if ($lookup eq "" && !($split2[$b]=~/TemplateList/) && !($split2[$b]=~/templates/) && !($host=~/^eth\d+/ || $host=~/^bond\d+/ || $host=~/^bond\d+/ || $host=~/^em\d+/ || $host=~/^p\d+p\d+/ ||  $host=~/^ib\d+/)) {
 																$lookup=`nslookup \"$host\" | grep "Address:" | grep -v "#" | awk '{print \$2}'`;
 																$lookup=~s/\n/ /ig;
 																if ($lookup eq "") {
