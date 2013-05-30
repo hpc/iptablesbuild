@@ -1,0 +1,15 @@
+######################################################################
+#
+# BEGIN - OUTBOUND CFEngine 
+#
+# OUTBOUND traffic related to CFEngine's cf-serverd
+
+-A OUTPUT -p tcp -m tcp --dport 5308 -j cfengine_out_permit
+
+-A cfengine_out_permit -d @cfengine_out_permit -j ACCEPT
+-A cfengine_out_permit -m limit --limit 15/h --limit-burst 5 -j LOG --log-prefix "IPTABLES CF-OUT:" 
+-A cfengine_out_permit -j DROP
+
+# END - OUTBOUND CFEngine
+#
+######################################################################

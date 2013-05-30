@@ -1,0 +1,15 @@
+######################################################################
+#
+# BEGIN - INCOMING CFEngine 
+#
+# INCOMING traffic related to CFEngine's cf-serverd
+
+-A INPUT -p tcp -m tcp --dport 5308 -j cfengine_inc_permit
+
+-A cfengine_inc_permit -s @cfengine_inc_permit -j ACCEPT
+-A cfengine_inc_permit -m limit --limit 15/h --limit-burst 5 -j LOG --log-prefix "IPTABLES CF-IN:" 
+-A cfengine_inc_permit -j DROP
+
+# END - INCOMING CFEngine
+#
+######################################################################

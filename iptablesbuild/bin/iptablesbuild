@@ -19,7 +19,7 @@
 
 use Getopt::Long qw(:config no_ignore_case require_order);
 
-$Version = "2.2.4";
+$Version = "2.2.5";
 #Config file directory
 $config="/etc/iptablesbuild/iptablesbuild.conf";
 
@@ -522,7 +522,7 @@ foreach my $curProduct (keys %Product) {
 #This subroutine checks for characters in the variables that are unacceptable
 sub Varcheck {
 	@letters=split( "", "$_[0]");
-	$characters="abcdefghijklmnopqrstuvwxyz1234567890ABCDEFGHIJKLMNOPQRSTUVWXYZ_-/\\";
+	$characters="abcdefghijklmnopqrstuvwxyz1234567890ABCDEFGHIJKLMNOPQRSTUVWXYZ_-/\\\r\n";
 	for (my $x=0; $x <= $#letters; $x++) {
 		if ("$characters"=~/$letters[$x]/g) {
 		}
@@ -535,7 +535,7 @@ sub Varcheck {
 
 sub ValueCheck {
 	@letters=split( "", "$_[0]");
-	$characters="abcdefghijklmnopqrstuvwxyz1234567890ABCDEFGHIJKLMNOPQRSTUVWXYZ_ }{=-.,[]\n/#\t@\\\/";
+	$characters="abcdefghijklmnopqrstuvwxyz1234567890ABCDEFGHIJKLMNOPQRSTUVWXYZ_ }{=-.,[]\n/#\t@\\\/\r\n";
 	for (my $x=0; $x <= $#letters; $x++) {
 		if ("$characters"=~/\Q$letters[$x]\E/g) {
 		}

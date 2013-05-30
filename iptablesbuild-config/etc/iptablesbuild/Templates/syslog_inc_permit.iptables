@@ -5,6 +5,7 @@
 # INCOMING traffic related to syslog.
 
 -A INPUT -p tcp -m tcp --dport 514 -j syslog_inc_permit
+-A INPUT -p udp -m udp --dport 514 -j syslog_inc_permit
 
 -A syslog_inc_permit -s @syslog_inc_permit -j ACCEPT
 -A syslog_inc_permit -m limit --limit 15/h --limit-burst 5 -j LOG --log-prefix "IPTABLES SYSLOG-IN:" 
