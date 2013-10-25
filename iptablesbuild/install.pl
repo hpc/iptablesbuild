@@ -1,4 +1,6 @@
 #!/usr/bin/perl
+use strict;
+use warnings;
 
 # Copyright (c) 2011-2012 Los Alamos National Security, LLC. All rights reserved.
 
@@ -21,15 +23,18 @@
 
 use Getopt::Long;
 
-@bin_files = ("iptablesbuild", "iptablestest");
-@bin_md5s=("48c4b952e22dfea7738e0932cff41600","1851874394a1d99ceabc6ac21f22353d");
+my @bin_files = ("iptablesbuild", "iptablestest");
 
 
 ## Grabs the configure options
-local $opt_help = undef;
-local $opt_conf = undef;
-local $opt_bin = undef;
-local $opt_perl = undef;
+my $opt_help = undef;
+my $opt_conf = undef;
+my $opt_bin = undef;
+my $opt_perl = undef;
+my $opt_root = undef;
+my $opt_docs = undef;
+my $opt_man = undef;
+my $opt_force = undef;
 
 GetOptions(
 	'h|help'	=> \$opt_help,
@@ -57,52 +62,40 @@ if (defined $opt_help) {
 
 
 # Sets Default values to the variables or uses what the user has given.
-
+my $version = "2.3.0";
+my $conf = "/etc";
+my $bin = "/usr/sbin";
+my $perl = "/usr/bin/perl";
+my $root = "/";
+my $docs = "/usr/share/doc";
+my $man = "/usr/share/man";
 if (defined $opt_conf) {
 	$conf = $opt_conf;
-}
-else {
-	$conf = "/etc";
 }
 
 if (defined $opt_bin) {
 	$bin = $opt_bin;
 }
-else {
-	$bin = "/usr/sbin";
-}
 if (defined $opt_perl) {
 	$perl = $opt_perl;
-}
-else {
-	$perl = "/usr/bin/perl";
 }
 if (defined $opt_root) {
 	$root = $opt_root;
 }
-else {
-	$root = "/";
-}
 if (defined $opt_docs) {
 	$docs = $opt_docs;
-}
-else {
-	$docs = "/usr/share/doc";
 }
 if (defined $opt_man) {
 	$man = $opt_man;
 }
-else {
-	$man = "/usr/share/man";
-}
 
 if (!(defined $opt_force)) {
 	print "Perl is Sane? ";
-	$sanity = `$perl -v`;
-	
+	my $sanity = `$perl -v`;
+	my $cont;
 	while (!( $sanity =~/This is perl,/i) && $cont ne "y") {
 		print "$root/$perl does not appear to exist. Would you like to enter an alternate path? (y/n) [y] fancy!";
-		chop($inp = <STDIN>);
+		chop(my $inp = <STDIN>);
 		if ($inp ne "n") {
 			print "Enter a path to perl:";
 			chop($perl = <STDIN>);
@@ -121,57 +114,29 @@ if (!(defined $opt_force)) {
 }
 
 ######
-# Consistancy Check
-#
-# Checks to ensure that packages in this source install are valid 
-# (wouldn't want you installing gobly gook!)
-
-print "Checking Consistancy of Packages..,\n";
-$md5sum_exist = `md5sum -v 2>&1`;
-
-if ($md5sum_exist=~/Command not found/ig) {
-	print "Warning! md5sum could not be found in local PATH. Package Consistancy cannot be determined. Continue? (y/n) [y]\n";
-	chop($inp = <STDIN>);
-	if ($inp eq "n" || $inp eq "N") {
-		exit 0;
-	}
-}
-else {
-	for ($x=0; $x <= $#bin_files; $x++) {
-		chop($real_md5=`md5sum bin/$bin_files[$x] | awk '{print \$1}'`);
-		if ($real_md5 ne $bin_md5s[$x]) {
-			print "Warning: Packages do no appear to be consistant. Continue anyway? (y/n) [n]: ";
-			chop ($inp = <STDIN>);
-			if ( $inp ne "y" && $inp ne "Y") {
-				exit 3;
-			}
-		}
-	}
-}
-
-######
 # Package Configuration
 #
 # Sets the system specific variables in the script (ie conf file location)
 
 print "Configuring Packages...\n";
 `mkdir build 2>&1`;
-for ($x=0; $x <= $#bin_files; $x++) {
-	@file=undef;
-	open(file, "bin/$bin_files[$x]") or die "Unable to open bin/$bin_files[$x]";
-	@file = <file>;
-	close(file);
+foreach my $bin_file (@bin_files) {
+	my @file=undef;
+	open(my $fileHandle, "bin/$bin_file") or die "Unable to open bin/$bin_file";
+	@file = <$fileHandle>;
+	close($fileHandle);
 
-	for ($y=0; $y <= $#file; $y++) {
-		$file[$y]=~s/\%conf%/$conf/g;
-		$file[$y]=~s/\%perl%/$perl/g;
+	foreach my $line (@file) {
+		$line=~s/\%conf%/$conf/g;
+		$line=~s/\%perl%/$perl/g;
+		$line=~s/\%version%/$version/g;
 	};
-	open(build, "> build/$bin_files[$x]");
-	print build @file;
-	close(build);
+	open(my $build, "> build/$bin_file");
+	print $build @file;
+	close($build);
 	
 	# diff check to make sure nothing drastic happened
-	$diff = `diff -e bin/$bin_files[$x] build/$bin_files[$x] | wc -l`;
+	my $diff = `diff -e bin/$bin_file build/$bin_file | wc -l`;
 	if ($diff >= 10 || $diff <= 2) {
 		print "diff:$diff\n";
 		print "Warning! Build file does not appear to have been constructed proporly. Please rerun this installer. Exiting...\n";
@@ -188,11 +153,12 @@ for ($x=0; $x <= $#bin_files; $x++) {
 # Copies the scripts to their designated locations
 
 print "Configuration Set. Running Install Scripts...\n";
-for ($x=0; $x <= $#bin_files; $x++) {
-	print `cp -f build/$bin_files[$x] $root/$bin/ 2>&1`;
-	print `chmod 755 $root$bin/$bin_files[$x] 2>&1`;
-	print `chown root:root $root$bin/$bin_files[$x] 2>&1`;
-	print `pod2man build/$bin_files[$x] $root$man/man1/$bin_files[$x].1`;
+foreach my $bin_file (@bin_files) {
+	print `cp -f build/$bin_file $root/$bin/ 2>&1`;
+	print `chmod 755 $root$bin/$bin_file 2>&1`;
+	print `chown root:root $root$bin/$bin_file 2>&1`;
+	print `pod2man --section 8 build/$bin_file $root$man/man8/$bin_file.8`;
+	print `gzip $root$man/man8/$bin_file.8`;
 }
 print `mkdir -p $root/$docs/iptablesbuild/sample/etc/iptablesbuild/Templates 2>&1`;
 print `cp -f docs/sample/Templates/* $root/$docs/iptablesbuild/sample/etc/iptablesbuild/Templates/ 2>&1`;
@@ -201,7 +167,8 @@ print `chown -R root:root $root/$docs/iptablesbuild/sample/etc/iptablesbuild 2>&
 
 
 
-print `pod2man docs/iptablesbuild.conf.pod $root$man/man1/iptablesbuild.conf.1`;
+print `pod2man --section 5 docs/iptablesbuild.conf.pod $root$man/man5/iptablesbuild.conf.5`;
+print `cd $root$bin; ln -s iptablesbuild iptbld`;
 
 
 ########
@@ -211,12 +178,12 @@ print `pod2man docs/iptablesbuild.conf.pod $root$man/man1/iptablesbuild.conf.1`;
 
 print "Running Post Install Checks...\n";
 
-for ($x=0; $x <= $#bin_files; $x++) {
-	chop($old_md5= `md5sum build/$bin_files[$x] | awk '{print \$1}'`);
-	chop($new_md5 = `md5sum $root$bin/$bin_files[$x] | awk '{print \$1}'`);
-	if ($old_md5 != $new_md5 || !(-e "$root$bin/$bin_files[$x]")) {
-		`rm $root$bin/$bin_files[$x]`;
-		die "Error iptablesbuild does not appear to have installed proporly. Removing $root$bin/$bin_files[$x].\n";
+foreach my $bin_file (@bin_files) {
+	chop(my $old_md5= `md5sum build/$bin_file | awk '{print \$1}'`);
+	chop(my $new_md5 = `md5sum $root$bin/$bin_file | awk '{print \$1}'`);
+	if ($old_md5 ne $new_md5 || !(-e "$root$bin/$bin_file")) {
+		`rm $root$bin/$bin_file`;
+		die "Error iptablesbuild does not appear to have installed proporly. Removing $root$bin/$bin_file.\n";
 	}
 }
 
