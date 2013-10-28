@@ -1,4 +1,7 @@
 #!%perl%
+use strict;
+use warnings;
+use Getopt::Long qw(:config no_ignore_case require_order);
 # Copyright (c) 2011-2012 Los Alamos National Security, LLC. All rights reserved.
 
 # This program was prepared by Los Alamos National Security, LLC at Los Alamos 
@@ -17,17 +20,22 @@
 # use of the configuration file /etc/iptablesbuild/iptablesbuild.conf and the templates
 # in /etc/iptablesbuild/Templates.
 
-use Getopt::Long qw(:config no_ignore_case require_order);
+my %termColors;
+$termColors{"bold"} = `tput bold`;
+$termColors{"reset"} = `tput sgr0`;
+$termColors{"red"} = `echo -en '\e[0;31m'`;
 
-$Version = "2.2.5";
-#Config file directory
-$config="/etc/iptablesbuild/iptablesbuild.conf";
 
-$opt_version = undef;
-$opt_help = undef;
-$opt_config = undef;
-$opt_list = undef;
-$opt_suffix=1;
+$| = 1;
+my $Version = "%version%";
+# Default Config file location
+my $config="%conf%/iptablesbuild/iptablesbuild.conf";
+
+my $opt_version = undef;
+my $opt_help = undef;
+my $opt_config = undef;
+my $opt_list = undef;
+my $opt_suffix=1;
 GetOptions(
 	'version|v'	=> \$opt_version,
 	'help|h'	=> \$opt_help,
@@ -40,7 +48,7 @@ if (defined $opt_version) {
 	print "iptablesbuild Version $Version\n";
 	exit 0;
 };
-if (!(defined $opt_list) && ($ARGV[0] eq undef || defined $opt_help)) {
+if (!(defined $opt_list) && (!(defined $ARGV[0] && $ARGV[0] =~/\S/ ) || defined $opt_help)) {
 	print "iptablesbuild.pl\n";
 	print "This script generates iptables configurations for the products given in \"$config\"\n\n";
 	print "Usage: iptablesbuild.pl <options> <Product|all>\n";
@@ -49,184 +57,186 @@ if (!(defined $opt_list) && ($ARGV[0] eq undef || defined $opt_help)) {
 	print "\t-c --config <file> : select an alternate config file\n";
 	print "\t-l --list : Lists off all systems that you can build along with their aliases\n\n";
 	print "Technical Assistance: grahamvh\@lanl.gov\n\n";
-	exit 1;
+	exit 0;
 };
 
 if (defined $opt_config) {
-	$config=$opt_config
+	$config=$opt_config;
 };
 
-open(conf, "$config") or die "Error! Config file $config not found!\n\a";
-@tmp=<conf>;
-$confl=join("",@tmp);
+open(my $confHandle, "$config") or die "Error! Config file $config not found!\n\a";
+my @tmp=<$confHandle>;
+my $confl=join("",@tmp);
 @tmp=undef;
-close(conf);
-@cFiles=("$config");
+close($confHandle);
+my @cFiles=("$config");
 while ($confl=~/\n\s*include\s+(\S+)\s/){
 	@cFiles=(@cFiles,$1);
 	$confl=~s/include $1//ig;
 };
 
 # Set Base Variables
-$cur="";
-$cur2="";
-@CoreChains= ("POSTROUTING", "FORWARD", "INPUT", "OUTPUT");
+my $curSection="";
+my $curSubSection="";
+my @CoreChains= ("POSTROUTING", "FORWARD", "INPUT", "OUTPUT");
 
 
-%Product=();
-%Global=();
-%Template=();
-%aliases=();
+my %Product;
+my %Global;
+my %Template;
+my %aliases;
+my %Warnings;
+my @spinner = ("-", "\\", "|", "/");
 
 #Parses the Config file for all entries, and stores them in corisponding variables
-foreach $cFile (@cFiles) {
-	@conf=();
-	open(conf, "$cFile") or die "Error! Could not open config file \"$cFile\"!";
-	@conf=<conf>;
-	close(conf);
+foreach my $cFile (@cFiles) {
+	my @conf=();
+	my $confHandle;
+	open($confHandle, "$cFile") or die "Error! Could not open config file \"$cFile\"!";
+	@conf=<$confHandle>;
+	close($confHandle);
 	
 	for (my $x=0; $x <= $#conf; $x++) {
-		@tmp="";
+		my @tmp;
 		@tmp=split("#", $conf[$x]);
 		$conf[$x]=$tmp[0];
 		ValueCheck($conf[$x], $x+1, $cFile);
-		@arg="";
+		my @def="";
 		$conf[$x]=~s/\t//ig;
 		$conf[$x]=~s/\n//ig;
-		#print "$conf";
 		if ($conf[$x]=~/\{/) {
-			if ($cur=~/\S/) {
-				print "Error! line " . ($x+1) . " in config file \"$cFile\" starts a new { without terminating the current {. Recursion not permitted by iptablesbuild.\n";
+			if ($curSection=~/\S/) {
+				warning("[Error]", "line " . ($x+1) . " in config file \"$cFile\" starts a new { without terminating the current {. Recursion not permitted by iptablesbuild.", "config");
 				exit 2;
 			};
 			$conf[$x]=~s/\s//ig;
-			$cur=$conf[$x];
-			$cur=~s/ //ig;
-			$cur=~s/\{//ig;
-			Varcheck($cur, ($x+1), $conf[$x], $cFile);
+			$curSection=$conf[$x];
+			$curSection=~s/ //ig;
+			$curSection=~s/\{//ig;
+			Varcheck($curSection, ($x+1), $conf[$x], $cFile);
 			next;
 		};
 		if ($conf[$x]=~/\[/ig) {
 			$conf[$x]=~s/ //ig;
-			$cur2=$conf[$x];
-			$cur2=~s/\[//ig;	
-			$cur2=~s/\]//ig;
-			Varcheck($cur2, ($x+1), $conf[$x], $cFile);
-			if ($cur eq "Products" || $cur eq "Systems" ) {
-				if (keys %{$Product{$cur2}} > 0) {
-					print STDERR "Error! System/Product Area \"$cur2\" is defined twice!\n\a";
+			$curSubSection=$conf[$x];
+			$curSubSection=~s/\[//ig;	
+			$curSubSection=~s/\]//ig;
+			Varcheck($curSubSection, ($x+1), $conf[$x], $cFile);
+			if ($curSection eq "Products" || $curSection eq "Systems" ) {
+				if (keys %{$Product{$curSubSection}} > 0) {
+					warning("[Error]", "System/Product Area \"$curSubSection\" is defined twice!", "config");
 					exit 2;
 				};
 			}
-			elsif ($cur eq "Templates") {
+			elsif ($curSection eq "Templates") {
 					
-				if (keys %{$Template{$cur2}} > 0) {
-					print STDERR "Error! Template \"$cur2\" is defined twice!\n\a";
+				if (keys %{$Template{$curSubSection}} > 0) {
+					warning("[Error]", "Template \"$curSubSection\" is defined twice!", "config");
 					exit 2;
 				};
 			}
-			elsif ($cur eq "Config") {
-				print STDERR "Error! Config directives do not include [] groupings\n\a";
+			elsif ($curSection eq "Config") {
+				warning("[Error]", "Config directives do not include [] groupings", "config");
 				exit 2;
 			};
 			next;
 		};
 		# This assigns each variable defined in the config file to a variable here. 
 		if ($conf[$x]=~/\=/ig) {
-			@arg=split("=", $conf[$x]);
-			while ($arg[0]=~/^\s/ || $arg[0]=~/\s$/) {
-				$arg[0]=~s/^\s+//ig;
-				$arg[0]=~s/\s+$//ig;
+			my @def=split("=", $conf[$x]);
+			while ($def[0]=~/^\s/ || $def[0]=~/\s$/) {
+				$def[0]=~s/^\s+//ig;
+				$def[0]=~s/\s+$//ig;
 			};
-			while ($arg[1]=~/^\s/ || $arg[1]=~/\s$/) {
-				$arg[1]=~s/^\s+//ig;
-				$arg[1]=~s/\s+$//ig;
+			if (!(defined $def[1])) {
+				$def[1] = "";
 			};
-			Varcheck($arg[0], ($x+1), $cFile);
-			if ($cur eq "Products" || $cur eq "Systems") {
-				if ($Product{$cur2}{$arg[0]} != undef) {
-					print STDERR "Warning! System/Product variable $arg[0] for System/Product $cur2 is defined twice!\n";
+			while ($def[1]=~/^\s/ || $def[1]=~/\s$/) {
+				$def[1]=~s/^\s+//ig;
+				$def[1]=~s/\s+$//ig;
+			};
+			Varcheck($def[0], ($x+1), $cFile);
+			if ($curSection eq "Products" || $curSection eq "Systems") {
+				if (defined $Product{$curSubSection}{$def[0]} && $Product{$curSubSection}{$def[0]}=~/\S/) {
+					warning("[Warning]", "System/Product variable $def[0] for System/Product $curSubSection is defined twice!", "config");
 				};
 				#Assigns as $Product__<Product name>__<variable name>
-				$Product{$cur2}{$arg[0]}=[uniq(split(" ", $arg[1]))];
+				$Product{$curSubSection}{$def[0]}=[uniq(split(" ", $def[1]))];
 				
-				#print "Product-$cur2-$arg[0]: " . join( " ", @{$Product{$cur2}{$arg[0]}}) . "\n";
-				@{$Product{$cur2}{$arg[0]}}=uniq(split(" ", $arg[1]));
-				if (${$Product{$cur2}{$arg[0]}}[0] eq "") {
-					$Product{$cur2}{$arg[0]}= [" "];
+				@{$Product{$curSubSection}{$def[0]}}=uniq(split(" ", $def[1]));
+				if (!(defined ${$Product{$curSubSection}{$def[0]}}[0] && ${$Product{$curSubSection}{$def[0]}}[0] =~/\S/)) {
+					$Product{$curSubSection}{$def[0]}= [" "];
 				};
-				if ($arg[0] eq "alias") {
-					my @hosts=split(" ", $arg[1]);
+				if ($def[0] eq "alias") {
+					my @hosts=split(" ", $def[1]);
 					foreach my $host (@hosts) {
-						if ($aliases{$host}=~/\S/) {
-							print STDERR "Error! Alias \"$host\" is set to refer to both $aliases{$host} and $cur2!\n";
+						if (defined $aliases{$host} && $aliases{$host}=~/\S/) {
+							warning("Warning", "Error! Alias \"$host\" is set to refer to both $aliases{$host} and $curSubSection!", "config");
 							exit 2;
 						};
 							
-						$aliases{$host} = "$cur2";
+						$aliases{$host} = "$curSubSection";
 					};
 				};
 			}
-			elsif ($cur eq "Templates") {
+			elsif (defined $curSection && $curSection eq "Templates") {
 				#Assigns as $Templates__<Product name>__<variable name>
-				if ($Template{$cur2}{$arg[0]} != undef) {
-					print STDERR "Warning! Template variable $arg[0] for template $cur2 is defined twice!\n";
+				if (defined $Template{$curSubSection}{$def[0]} && $Template{$curSubSection}{$def[0]}=~/\S/) {
+					warning("[Warning]", "Template variable $def[0] for template $curSubSection is defined twice!", "config");
 				};
-				$Template{$cur2}{$arg[0]}=[uniq(split(" ", $arg[1]))];
-				#print "Templates-$cur2-$arg[0]: " . join( " ", @{$Template{$cur2}{$arg[0]}}) . "\n";
-				if (${$Template{$cur2}{$arg[0]}}[0] eq "") {
-					$Template{$cur2}{$arg[0]}= [" "];
+				$Template{$curSubSection}{$def[0]}=[uniq(split(" ", $def[1]))];
+				if (${$Template{$curSubSection}{$def[0]}}[0] eq "") {
+					$Template{$curSubSection}{$def[0]}= [" "];
 				};
 			}
-			elsif ($cur eq "Global") {
+			elsif (defined $curSection && $curSection eq "Global") {
 				#Assigns as $Global__<variable name>
-				if ($Global{$arg[0]} != undef) {
-					print STDERR "Warning! Global variable $arg[0] is defined twice!\n";
+				if (defined $Global{$def[0]} && $Global{$def[0]} =~/\S/) {
+					warning("[Warning]", "Global variable $def[0] is defined twice!", "config");
 				};
-				$Global{$arg[0]}=[uniq(split(" ", $arg[1]))];
-				#print "Global-$arg[0]: " . join(" ", @{$Global{$arg[0]}}) . "\n";
-				if (${$Global{$arg[0]}}[0] eq "") {
-					$Global{$arg[0]}= [" "];
+				$Global{$def[0]}=[uniq(split(" ", $def[1]))];
+				if (!(defined ${$Global{$def[0]}}[0] && ${$Global{$def[0]}}[0] =~/\S/)) {
+					$Global{$def[0]}= [" "];
 				};
 			}
-			elsif ($cur eq "Config") {
-				if ($arg[0] eq "suffix") {
-					if ($arg[1]=~/true/i) {
+			elsif (defined $curSection && $curSection eq "Config") {
+				if ($def[0] eq "suffix") {
+					if ($def[1]=~/true/i) {
 						$opt_suffix=1;
 					}
-					elsif ($arg[1]=~/false/i) {
+					elsif ($def[1]=~/false/i) {
 						$opt_suffix=0;
 					}
 					else {
-						print SRDERR "Error! line " . ($x+1) . " in config file \"$cFile\" $arg[0] must be true or false\n";
+						warning("[Error]", "line " . ($x+1) . " in config file \"$cFile\" $def[0] must be true or false", "config");
 						exit 2;
 					};
 				}
 				else {
-					print SRDERR "Error! line " . ($x+1) . " in config file \"$cFile\' line not understood as a config option\n\a";
+					warning("[Error]", "line " . ($x+1) . " in config file \"$cFile\' line not understood as a config option", "config");
 					exit 2;
 				}
 			}
 			else {
-				print STDERR "Error! line " . ($x+1) . " in config file \"$cFile\" not understood.\n";
+				warning("[Error]", "line " . ($x+1) . " in config file \"$cFile\" not understood.", "config");
 				exit 2;
 			};
 			next;
 		};
 		if ($conf[$x]=~/^\s*}\s*$/) {
-			$cur="";
+			$curSection="";
 			next;
 		};
 		if ($conf[$x]=~/include/) {
 			next;
 		};
 		if ($conf[$x]=~/\S/) {
-			print "Error! line " . ($x+1) . " in config file \"$cFile\" not understood.\n";
+			warning("[Error]", "line " . ($x+1) . " in config file \"$cFile\" not understood.", "config");
 			exit 2;
 		};
 	};
-	if ($cur=~/\S/) {
-		print "Error! Missing right curly bracket '}' in config file \"$cFile\" to terminate \"$cur\"\n";
+	if ($curSection=~/\S/) {
+		warning("[Error]", "Missing right curly bracket '}' in config file \"$cFile\" to terminate \"$curSection\"", "config");
 		exit 2;
 	};
 		
@@ -235,349 +245,372 @@ foreach $cFile (@cFiles) {
 if (defined $opt_list) {
 	printf("\n%-25s %s\n\n", "System", "Aliases");
 	foreach my $key (keys %Product) {
-		printf("%-25s %s\n", "$key :", join(",", @{$Product{$key}{alias}}));
+		printf("%-25s %s\n", "$key :", join(",", @{$Product{$key}{"alias"}}));
 	};
 	exit 0;
 };
 
-@Build=();
-for ($x=0; $x <= $#ARGV; $x++) {
-	if ($ARGV[$x] eq "all") {
-		@Build=keys %Product;
+my @Build=();
+for (my $x=0; $x <= $#ARGV; $x++) {
+	if ($ARGV[$x] =~/^all$/i) {
+		@Build = keys %Product;
 		last;
+	};
+	my $regex = $ARGV[$x];
+	$regex =~s/\*/.*/ig;
+	my $pass = 0;
+	P: foreach my $prod (keys %Product) {
+		if ($prod=~/^$regex$/) {
+			@Build=(@Build, $prod);
+			$pass = 1;
+			next P;
+		};
+		A: foreach my $alias (@{$Product{$prod}{"alias"}}) {
+			if ($alias=~/^$regex$/i || $alias eq $regex) {
+				@Build=(@Build, $prod);
+				$pass = 1;
+				last A;
+			};
+		};
 	}
-	elsif (keys %{$Product{$ARGV[$x]}} > 0) {
-		@Build=(@Build, $ARGV[$x]);
-	}
-	elsif (keys %{$Product{$aliases{$ARGV[$x]}}} > 0) {
-		@Build=(@Build, $aliases{$ARGV[$x]});
-		print "$ARGV[$x] is an alias for $aliases{$ARGV[$x]}. Building $aliases{$ARGV[$x]}...\n\n";
-	}
-	else {
-		print STDERR "\"$ARGV[$x]\" is not a defined product in $config.\n\nUsage: iptablesbuild.pl <Product>\nType all to build for all products\n\a";
+	if (!($pass)) {
+		warning("[Warning]", "\"$ARGV[$x]\" is not a defined product in $config.\n\nUsage: iptablesbuild.pl <Product>\nType all to build for all products", "setup");
 	}; 
 };
 
 
-
+@Build = uniq(@Build);
 #Looks through all the products and builds the iptables config file for each one.
-foreach my $curProduct (keys %Product) {
-	if ($curProduct ne "") {
-		#Determines if the current product was assigned to be (re)built
-		if (" @Build "=~/ $curProduct /g || " @Build "=~/ all /ig) {
+Build: foreach my $curProduct (@Build) {
+	if ($curProduct =~/\S/) {
+		print "######################################################################################\n";
+		my $spin = 0;
 
 			
-			# Make the Template List for the top of the iptables file and make sure that they have a value
-			foreach my $CoreChain (@CoreChains) {
-				my @tList= ();
-				my %priorityList = ();
-				my $loop=0;
-				while ("@{$Product{$curProduct}{\"templates_$CoreChain\"}}"=~/\@/) {
-					$Product{$curProduct}{"templates_$CoreChain"}=[uniq(VareqVar($curProduct,@{$Product{$curProduct}{"templates_$CoreChain"}}))];
-					$loop++;
-					if ($loop > 100) {
-						print STDERR "Warning loop prevention stopped variable \"$split2[$b]\" from being defined. It has been set to more than 100 different variables. Please reduce this number.\n";
-						exit 1;
-						
-					};
-				};
-				$loop=undef;
-				foreach my $template (@{$Product{$curProduct}{"templates_$CoreChain"}}) {
-					my $priority;
+		# Make the Template List for the top of the iptables file and make sure that they have a value
+		foreach my $CoreChain (@CoreChains) {
+			my @tList= ();
+			my %priorityList = ();
+			$Product{$curProduct}{"templates_$CoreChain"}=[VareqVar($curProduct,@{$Product{$curProduct}{"templates_$CoreChain"}})];
+			foreach my $template (@{$Product{$curProduct}{"templates_$CoreChain"}}) {
+				my $priority;
+				if (defined $Template{$template}{"Priority"} && $Template{$template}{"Priority"}[0] =~/\S/) {
 					$Template{$template}{"Priority"}[0]=~s/\s//ig;
 					if (($Template{$template}{"Priority"}[0]=~/\D/)) {
-						print STDERR "Warning! Non-diget character '" . $Product{$curProduct}{"templates_$CoreChain"}[0] ."' used for Priority on template: \"$template\".\n";
-						exit 2;
+						warning("[FAIL]", "Non-diget character '" . $Product{$curProduct}{"templates_$CoreChain"}[0] ."' used for Priority on template: \"$template\". Skipping $curProduct...", $curProduct);
+						next Build;
 					};
-					if (!($Template{$template}{"Priority"}[0]=~/\d/)) {
-						$priority=50
-					}
-					else {
-						$priority=$Template{$template}{"Priority"}[0];
-					};
-					$priorityList{$priority}=[@{$priorityList{$priority}},$template];
-				};
-				@tList = keys %priorityList;
-				@tList = uniq(sort{ $a <=> $b }(@tList));
-				$Product{$curProduct}{"templates_$CoreChain"}=[];
-				for $prio (@tList) {
-					$Product{$curProduct}{"templates_$CoreChain"}=[@{$Product{$curProduct}{"templates_$CoreChain"}}, @{$priorityList{$prio}}];
-				};
-				if (${$Product{$curProduct}{"templates_$CoreChain"}}[0]=~/\S/ ) {
-					foreach my $templateList (@{$Product{$curProduct}{"templates_$CoreChain"}}) {
-						if ($templateList =~/\S/ig) {
-							$Product{$curProduct}{"TemplateList_$CoreChain"} = [@{$Product{$curProduct}{"TemplateList_$CoreChain"}}, $templateList];
-						};
-					};
+					$priority=$Template{$template}{"Priority"}[0];
 				}
 				else {
-					$Product{$curProduct}{"TemplateList_$CoreChain"}= [" "];
-				};
-				$Product{$curProduct}{"templates_$CoreChain"}=["AllPreface_$CoreChain", @{$Product{$curProduct}{"templates_$CoreChain"}}, "AllPostscript_$CoreChain"];
+					$priority=50
+				}
+				if (defined $priorityList{$priority} && @{$priorityList{$priority}} > 0 ) {
+					$priorityList{$priority} = [@{$priorityList{$priority}},$template];
+				}
+				else {
+					$priorityList{$priority} = [$template];
+				}
 			};
-			@Output="";
-			@Output= (@Output , "##\n");
-			@Output= (@Output , "# Warning! This configuration was generated by iptablesbuild v$Version!\n");
-			@Output= (@Output , "# Any changes you make to this file may be overwritten!\n");
-			@Output= (@Output , "# Product/System: $curProduct\n");
-			@Output= (@Output , "# Aliases: " . join(", ", @{$Product{$curProduct}{"alias"}}) . "\n");
-			@Output= (@Output , "#\n\n\n\n");
-	
-
-			foreach my $CoreChain (@CoreChains) {
-				#Creates a seperate Template list of the templates that where defined in the config file before adding to it.
-				#Inserts the Templates that should be in every product into the template list
-				
-
-
-
-				#This cycles through all the templates defined to be usd in this product.
-				T: foreach my $template (@{$Product{$curProduct}{"templates_$CoreChain"}}) {
-					if ($template eq " ") {
-						next T;
-					}
-					my @file = "";
-					#This opens the template file and stores it in @file
-					if ($Template{$template}{"template"}[0]=~/\S/) {
-						open(file, $Template{$template}{"template"}[0]) or die "\nFailed to open template file: \"$Template{$template}{\"template\"}[0]\"! from Template $template, for Product \"$curProduct\" exiting!";
-						@file=<file>;
-						close(file);
-						@file=(@file,"\n\n");
-					}
-					else {
-						print "Error! Template file for $template not defined!\n";
-						exit 1;
+			@tList = keys %priorityList;
+			@tList = uniq(sort{ $a <=> $b }(@tList));
+			$Product{$curProduct}{"templates_$CoreChain"}=[];
+			for my $prio (@tList) {
+				$Product{$curProduct}{"templates_$CoreChain"}=[@{$Product{$curProduct}{"templates_$CoreChain"}}, @{$priorityList{$prio}}];
+			};
+			if (defined ${$Product{$curProduct}{"templates_$CoreChain"}}[0] && ${$Product{$curProduct}{"templates_$CoreChain"}}[0]=~/\S/ ) {
+				foreach my $templateList (@{$Product{$curProduct}{"templates_$CoreChain"}}) {
+					if ($templateList =~/\S/ig) {
+						if (defined $Product{$curProduct}{"TemplateList_$CoreChain"} && @{$Product{$curProduct}{"TemplateList_$CoreChain"}} > 0 ) {
+							$Product{$curProduct}{"TemplateList_$CoreChain"} = [@{$Product{$curProduct}{"TemplateList_$CoreChain"}}, $templateList];
+						}
+						else {
+							$Product{$curProduct}{"TemplateList_$CoreChain"} = [$templateList];
+						};
 					};
-					#This cycles through the file in order to replace variables with the correct values
-					for ($z=0; $z <= $#file; $z++) {
-						# Remove RCS header if present
-						if ( $file[$z]=~/\$Header:/ ) {
-                                        		$file[$z]="";  
-						};
-						while ($file[$z]=~/^\s+\n$/i) {
-							$file[$z]=~s/^\s+\n$/\n/ig;
-						};
-						#if the current line contains a variable continue, if not go to the next line.
-						if ($file[$z]=~/\@/ig) {
-							$file[$z]=~s/\n/ \n/ig;
-							@split=split(" ", $file[$z]);
-							#Splits the file into individual words and cycles through them.
-							for ($a=0; $a <= $#split; $a++) {
-								#if the word contains a variable continue, if not go onto th next word.
-								if ($split[$a]=~/\@/ig) {
-									@split2=split("\@", $split[$a]);
-									#This removes all of the junk characters in front of the variable, and seperates multiple variables on the same line; in order to help process it. Then cycles through the list
-									for ($b=1; $b <= $#split2; $b++) {
-										#if the current value of split contains a variable, process it.
-										if ("$split[$a]"=~/\@$split2[$b]/ig) {
-											$split2[$b]=~s/-//ig;
-											$split2[$b]=~s/"//ig;
-											# Check to see if the variable exsists. If it doesn't complain and comment that line out. 
-											if (@{$Product{$curProduct}{$split2[$b]}} == undef) {
-												if (@{$Global{$split2[$b]}} != undef) {
-													$Product{$curProduct}{$split2[$b]} = [@{$Global{$split2[$b]}}];
+				};
+			}
+			else {
+				$Product{$curProduct}{"TemplateList_$CoreChain"}= [" "];
+			};
+			$Product{$curProduct}{"templates_$CoreChain"}=["AllPreface_$CoreChain", @{$Product{$curProduct}{"templates_$CoreChain"}}, "AllPostscript_$CoreChain"];
+		};
+		my @Output="";
+		@Output= (@Output , "##\n");
+		@Output= (@Output , "# Warning! This configuration was generated by iptablesbuild v$Version!\n");
+		@Output= (@Output , "# Any changes you make to this file may be overwritten!\n");
+		@Output= (@Output , "# Product/System: $curProduct\n");
+		if (defined @{$Product{$curProduct}{"alias"}}) {
+			@Output= (@Output , "# Aliases: " . join(", ", @{$Product{$curProduct}{"alias"}}) . "\n");
+		};
+		@Output= (@Output , "#\n\n\n\n");
+
+		foreach my $CoreChain (@CoreChains) {
+			#Creates a seperate Template list of the templates that where defined in the config file before adding to it.
+			#Inserts the Templates that should be in every product into the template list
+			if (!(defined $Product{$curProduct}{"templates_$CoreChain"} && $Product{$curProduct}{"templates_$CoreChain"} =~/\S/)) {
+				$Product{$curProduct}{"templates_$CoreChain"} = [' '];
+			};
+
+
+
+			#This cycles through all the templates defined to be usd in this product.
+			Template: foreach my $template (@{$Product{$curProduct}{"templates_$CoreChain"}}) {
+				if ($template eq " ") {
+					next Template;
+				}
+				my @file = "";
+				#This opens the template file and stores it in @file
+				if ($Template{$template}{"template"}[0]=~/\S/) {
+					open(my $file, $Template{$template}{"template"}[0]) or die "\nFailed to open template file: \"$Template{$template}{\"template\"}[0]\"! from Template $template, for Product \"$curProduct\" exiting!";
+					@file=<$file>;
+					close($file);
+					@file=(@file,"\n\n");
+				}
+				else {
+					warning("[FAIL]", "Template file for $template not defined! Skipping $curProduct...", $curProduct);
+					next Build;
+				};
+				#This cycles through the file in order to replace variables with the correct values
+				my $lineNum = 0;
+				FileLine: foreach my $line (@file) {
+					$lineNum++;
+					# Remove RCS header if present
+					if ( $line=~/\$Header:/ ) {
+                                       		$line="";  
+					};
+					while ($line=~/^\s+\n$/i) {
+						$line=~s/^\s+\n$/\n/ig;
+					};
+					#if the current line contains a variable continue, if not go to the next line.
+					if ($line=~/\@/ig) {
+						$line=~s/\n/ \n/ig;
+						my @lineWords=split(" ", $line);
+						#Splits the file into individual words and cycles through them.
+						foreach my $lineWord (@lineWords) {
+							#if the word contains a variable continue, if not go onto the next word.
+							if ($lineWord=~/\@/ig) {
+								my @varList=split("\@", $lineWord);
+								shift(@varList);
+								#This removes all of the junk characters in front of the variable, and seperates multiple variables on the same line; in order to help process it. Then cycles through the list
+								foreach my $var (@varList) {
+
+									#if the current value of split contains a variable, process it.
+									$var=~s/-//ig;
+									$var=~s/"//ig;
+									# check to see if the variable exists. if it doesn't complain and comment that line out.
+									if (!(defined $Product{$curProduct}{$var} && @{$Product{$curProduct}{$var}} > 0)) {
+										if (!(defined $Global{$var} && @{$Global{$var}} > 0)) {
+											my $tmp=$line;
+											$tmp=~s/\n//ig;
+											warning("[Warning]", "\r\@$var has not been defined for product: $curProduct!\nrule line: $lineNum in $template: \"$tmp\" has been commented out", $curProduct);
+											$line="#$line";
+											next FileLine;
+										};
+									};
+									my $tmp=$line;
+									my @entries=VareqVar($curProduct, "\@$var");
+									#this checks to see if that variable has been defined, but has no value. if this is the case, it just comments it out.
+									
+									if (@entries == 0) {
+										$line=~s/\n//ig;
+										$line="#$line # Line commented out due to lack of value for \@$var\n";
+									}
+									else {
+										#cycle through all the values contained within the variable. and create new lines for each one. 
+										$line="\#\$\\\n$line";
+										my $varNum=0;
+										foreach my $host (@entries) {
+											my $lookup = "";
+											my $hostname = "";
+											# If assigning multiple variables to a line, create new lines for each additional value.
+											if ( $varNum > 0 ) {
+												$line="$line$tmp";
+											};
+											$host=~s/ //ig;
+											$host=~s/\n//ig;
+											$host=~s/\t//ig;
+											if (!($host=~/^\d+\.\d+\.\d+\.\d+$/ig || $host=~/^\d+\.\d+\.\d+\.\d+\/\d+$/ig)) {
+												if ( $host ne "") {
+													if ($lookup eq "" && !($var=~/templatelist/i) && !($var=~/templates/) && !($host=~/^eth\d+/ || $host=~/^bond\d+/ || $host=~/^bond\d+/ || $host=~/^em\d+/ || $host=~/^p\d+p\d+/ ||  $host=~/^ib\d+/)) {
+														$lookup=`nslookup \"$host\" | grep -i "address:" | grep -v "#" | awk '{print \$2}'`;
+														$lookup=~s/\n/ /ig;
+														$lookup=~s/\n$//;
+														if ($lookup eq "") {
+															warning("[FAIL]", "\rvalue \"$host\" is not a valid hostname or dns is not functioning proporly. Skipping this system...", $curProduct);
+															next Build;
+														};
+													};
+													if ($lookup=~/\d+\.\d+\.\d+\.\d+/ig) {
+														$hostname=$host;
+														$host=$lookup;
+													};
+												};
+											};
+											#print "host:$hostname: $host\n";
+											if ($host=~/^\S+\s\S/) {
+												my @tmp = split(" ", $host);
+												@tmp=sort(@tmp);
+												$host = join(" ", @tmp);
+											};
+											while ($host=~/^(\S+)\s\S/) {
+												my $entry=$1;
+												$host=~s/^$entry //ig;
+												$line=~s/\@$var /$entry /g;
+												$line=~s/\@$var\@/$entry\@/g;
+												$line=~s/\@$var\\/$entry/g;
+												$line="$line$tmp";
+											};
+											$host=~s/\s//ig;
+											$host=~s/^\s*(\s+)\s*/$1/ig;
+											$line=~s/\@$var /$host /g;
+											$line=~s/\@$var\@/$host\@/g;
+											$line=~s/\@$var\\/$host/g;
+											#if the line contains a ip address, try to find out it's hostname, and place that in a comment after the line.
+											if ($host=~/(\d+)\.(\d+)\.(\d+)\.(\d+)$/ig || $host=~/(\d+)\.(\d+)\.(\d+)\.(\d+)/ig) {
+												
+												print "\rBuilding $curProduct: " . $spinner[$spin % 4];
+												$spin++;
+	
+												$lookup=~s/\n//ig;
+												if (!(defined $hostname && $hostname =~/\S/)) {
+													my $cmd="nslookup \"$1.$2.$3.$4\" | grep \"name =\"| awk '{print \$4}'";
+													$lookup=`$cmd`;
+													$lookup=~s/\n//ig;
+													$line=~s/\#\$\\/\n# $lookup/ig;
 												}
 												else {
-													$tmp=$file[$z];
-													$tmp=~s/\n//ig;
-													print STDERR "\nWarning!! \@$split2[$b] has not been defined for Product: $curProduct!\nRule Line: " . ($z+1) ." in $template: \"$tmp\" has been commented out\n\n\a";
-													$file[$z]="#$file[$z]";
+													$hostname=~s/\n//ig;
+													$line=~s/\#\$\\/\n# $hostname/ig;
 												};
+												$line=~s/\n$/\#\$\\\n/ig;
 											};
-											#This Checks to see if that variable has been defined, but has bo value. If this is the case, it just comments it out.
-											my $tmp=$file[$z];
-											@var=@{$Product{$curProduct}{$split2[$b]}};
-											my $loop = 0;
-											while ("@var"=~/\@/) {
-												@var=uniq(VareqVar($curProduct, @var));
-												$loop++;
-												if ($loop > 100) {
-													print "Warning loop prevention stopped variable \"$split2[$b]\" from being defined. It has been set to more than 100 different variables. Please reduce this number.\n";
-													last;
-												};
-											};
-											if (!("@var"=~/\S/ )) {
-												$file[$z]=~s/\n//ig;
-												$file[$z]="#$file[$z] # Line commented out due to lack of value for \@$split2[$b]\n";
-											}
-											else {
-												#Cycle through all the values contained within the variable. and create new lines for each one. 
-												$file[$z]="\#\$\\\n$file[$z]";
-												my $d=0;
-												foreach my $host (@var) {
-													$lookup="";
-													$hostname=undef;
-													if ( $d > 0 ) {
-														$file[$z]="$file[$z]$tmp";
-													};
-													$host=~s/ //ig;
-													$host=~s/\n//ig;
-													$host=~s/\t//ig;
-						
-													if ($host=~/^\d+\.\d+\.\d+\.\d+$/ig || $host=~/^\d+\.\d+\.\d+\.\d+\/\d+$/ig) {
-													}
-													else {
-														if ( $host ne "") {
-															if ($lookup eq "" && !($split2[$b]=~/TemplateList/) && !($split2[$b]=~/templates/) && !($host=~/^eth\d+/ || $host=~/^bond\d+/ || $host=~/^bond\d+/ || $host=~/^em\d+/ || $host=~/^p\d+p\d+/ ||  $host=~/^ib\d+/)) {
-																$lookup=`nslookup \"$host\" | grep "Address:" | grep -v "#" | awk '{print \$2}'`;
-																$lookup=~s/\n/ /ig;
-																if ($lookup eq "") {
-																	print STDERR "Error! value \"$host\" is not a valid hostname or DNS is not functioning proporly.\n\a";
-																	exit 2;
-																};
-															};
-															if ($lookup=~/\d+\.\d+\.\d+\.\d+/ig) {
-																$hostname=$host;
-																$host=$lookup;
-															};
-														};
-													};
-													if ($host=~/^(\S+) \S/) {
-														my @tmp = split(" ", $host);
-														@tmp=sort(@tmp);
-														$host = join(" ", @tmp);
-													};
-													while ($host=~/^(\S+) \S/) {
-														my $entry=$1;
-														$host=~s/^$entry //ig;
-														$file[$z]=~s/\@$split2[$b] /$entry /g;
-														$file[$z]=~s/\@$split2[$b]\@/$entry\@/g;
-														$file[$z]=~s/\@$split2[$b]\\/$entry/g;
-														$file[$z]="$file[$z]$tmp";
-													};
-													$host=~s/^\s*(\S+)\s*/$1/ig;
-													$file[$z]=~s/\@$split2[$b] /$host /g;
-													$file[$z]=~s/\@$split2[$b]\@/$host\@/g;
-													$file[$z]=~s/\@$split2[$b]\\/$host/g;
-													#If the line contains a ip address, try to find out it's hostname, and place that in a comment after the line.
-													if ($host=~/(\d+)\.(\d+)\.(\d+)\.(\d+)$/ig || $host=~/(\d+)\.(\d+)\.(\d+)\.(\d+)/ig) {
-														print "#";
-														$lookup=~s/\n//ig;
-														if ($hostname eq "") {
-															$cmd="nslookup \"$1.$2.$3.$4\" | grep \"name =\"| awk '{print \$4}'";
-															$lookup=`$cmd`;
-															$lookup=~s/\n//ig;
-															$file[$z]=~s/\#\$\\/\n# $lookup/ig;
-														}
-														else {
-															$hostname=~s/\n//ig;
-															$file[$z]=~s/\#\$\\/\n# $hostname/ig;
-														};
-														$file[$z]=~s/\n$/\#\$\\\n/ig;
-													};
-													$d++;
-												};
-											};
+											$varNum++;
 										};
 									};
 								};
 							};
 						};
-						$file[$z]=~s/\#\$\\\n/\n/ig;
 					};
-					#add the contents of the current file to the Output.
-					@Output=(@Output, @file, "\n\n");
+					$line=~s/\#\$\\\n/\n/ig;
 				};
+				#add the contents of the current file to the Output.
+				@Output=(@Output, @file, "\n\n");
 			};
-			my $file = "";
-			if ("@{$Product{$curProduct}{file}}"=~/\S/) {
-				$file = join(" ", @{$Product{$curProduct}{file}});
-			}
-			elsif (${$Global{file}}[0]=~/\S/) {
-				$file = join(" ", @{$Global{file}});
-			}
-			else {
-				print STDERR "\nWarning file location not defined. using /tmp/iptables\n\n\a";
-				$file = "/tmp/iptables";
-			};
-			$file=~s/\s+@/@/ig;
-			$file=~s/@/ @/ig;
-			$file=~s/^\s+//ig;
-			my @tmp = split(" ", $file);
-			$file=join("", VareqVar($curProduct, @tmp));
-			if ($opt_suffix == 1) {
-				$file .= ".$curProduct";
-			};
-			$file=~s/\s//ig;
-			open(out, "> $file") or die "Failed to open $file\n";
-			for ($y=0; $y <= $#Output; $y++) {
-				print out "$Output[$y]";
-			};
-			close(out);
-			print "\nProduct $curProduct built successfully!\n";
-			print "Temporary file located at $file\n";
-			print "Copy the iptables config over the given system's /etc/sysconfig/iptables file to install\n";
-			print "Be Sure to check to see if this config is how you want it before using!\n\n";
+		};
+		print "\rBuilding $curProduct: Complete!\n";
+		my $file = join("", VareqVar($curProduct, "\@file"));
+		if (!($file =~/\S/)) {
+			warning("[Warning]", "\n\@file location not defined. using /tmp/iptables", $curProduct);
+			$file = "/tmp/iptables";
+		};
+		if ($file eq "\@") {
+			warning("[FAIL]", "\nfile location is invalid '$file'. Skipping $curProduct...", $curProduct);
+			next Build;
+		};
+		$file=~s/\s+//ig;
+		if ($opt_suffix == 1) {
+			$file .= ".$curProduct";
+		};
+		open(my $out, "> $file") or die "Failed to open $file\n";
+			for (my $y=0; $y <= $#Output; $y++) {
+			print $out "$Output[$y]";
+		};
+		close($out);
+		print "\nProduct $curProduct built successfully!\n";
+		print "Temporary file located at $file\n";
+		print "Copy the iptables config over the given system's /etc/sysconfig/iptables file to install\n";
+		print "Be Sure to check to see if this config is how you want it before using!\n\n";
 
-			my $errors= `/usr/sbin/iptablestest $file`;
-			if ($errors=~/error/i) {
-				print "\n\n";
-				print STDERR "Error! iptablestest found the following critical errors with the generated file:\n\a$errors\a";
-			};
-		};	
+		my $errors= `/usr/sbin/iptablestest $file`;
+		if ($errors=~/error/i) {
+			warning("[Error]", "\n\niptablestest found the following critical errors with the generated file:\n$errors", $curProduct);
+		};
 	};	
 };
+
+# When building multiple systems, print out all errors at the end.
+if (@Build > 1) {
+	my @warnKeys = keys %Warnings;
+	print "\n\n\n\n";
+	if (@warnKeys == 0) {
+		print "Requested builds: (" . join(" ", @Build) . ") built Successfully!\n";
+		exit 0;
+	}
+	else {
+		print STDERR "Errors where found when building the given product/system areas:\n";
+		foreach my $key (@warnKeys) {
+			print "\n\n$key:\n$Warnings{$key}";
+		};
+		exit 1;
+	};
+};
+
+
+
+#################################
+########## Subroutines ##########
+#################################
+
 
 
 #This subroutine checks for characters in the variables that are unacceptable
 sub Varcheck {
-	@letters=split( "", "$_[0]");
-	$characters="abcdefghijklmnopqrstuvwxyz1234567890ABCDEFGHIJKLMNOPQRSTUVWXYZ_-/\\\r\n";
+	my @letters=split( "", "$_[0]");
+	my $characters="abcdefghijklmnopqrstuvwxyz1234567890ABCDEFGHIJKLMNOPQRSTUVWXYZ_-/\\\r\n";
 	for (my $x=0; $x <= $#letters; $x++) {
 		if ("$characters"=~/$letters[$x]/g) {
 		}
 		else {
-			print STDERR "\nSyntax Error!! Line $_[1]. Illegal character \"$letters[$x]\" detected in config file \"$_[2]\"!\n\a";
+			warning("[Error]", "\nSyntax Error!! Line $_[1]. Illegal character \"$letters[$x]\" detected in config file \"$_[2]\"!", "Varcheck");
 			exit 2;
 		};
 	};
 };
 
 sub ValueCheck {
-	@letters=split( "", "$_[0]");
-	$characters="abcdefghijklmnopqrstuvwxyz1234567890ABCDEFGHIJKLMNOPQRSTUVWXYZ_ }{=-.,[]\n/#\t@\\\/\r\n";
+	my @letters=split( "", "$_[0]");
+	my $characters="abcdefghijklmnopqrstuvwxyz1234567890ABCDEFGHIJKLMNOPQRSTUVWXYZ_ }{=-.,[]\n/#\t@\\\/\r\n";
 	for (my $x=0; $x <= $#letters; $x++) {
 		if ("$characters"=~/\Q$letters[$x]\E/g) {
 		}
 		else {
-			print STDERR "\nSyntax Error!! Line $_[1]. Illegal character \"$letters[$x]\" Used!\n\a";
+			warning("[Error]", "\nSyntax Error!! Line $_[1]. Illegal character \"$letters[$x]\" Used!", "valueCheck");
 			exit 2;
 		};
 	};
 	if ($_[0]=~/= (\w+)/ig) {
-		print STDERR "\nSyntax Error!! Line $_[1]. Illegal character combination \"= $1\" detected in config file \"$_[2]\"!\n\a";
+		warning("[Error]", "\nSyntax Error!! Line $_[1]. Illegal character combination \"= $1\" detected in config file \"$_[2]\"!", "valueCheck");
 		exit 2;
 	};
 };
 
 
-
-#This subroutine looks for variables set equal to variables, and adds the appropriate data to the variable.
+# VareqVar
+# This subroutine handles variable definitions where one variable is set to the value of annother, but following the tree and pulling all the leaf values.
+#
+# INPUT1: product/system name
+# INPUT2-*: variable list to decompile
+# OUTPUT: variable tree leaves. (array)
 sub VareqVar {
 	my @vals=undef;
-	my @tmp=undef;
-	my $curProduct = $_[0];
-	for (my $x=1; $x <= $#_; $x++) {
-		if ( $_[$x]=~/\@/) {
-			my $trans= $_[$x];
+	my $curProduct = shift(@_);
+	for my $value (@_) {
+		my $trans = $value;
+		my @tmp=undef;
+		if ( $trans=~/\@/) {
 			$trans=~s/\@//ig;
-			if (@{$trans} != undef) {
-				@tmp = @{$trans};
-				@vals=(@vals, @tmp);
+			if (defined $Product{$curProduct}{$trans} && @{$Product{$curProduct}{$trans}} > 0) {
+				@tmp = VareqVar($curProduct, @{$Product{$curProduct}{$trans}});
+			}
+			elsif (defined $Global{$trans} && @{$Global{$trans}} > 0) {
+				@tmp = VareqVar($curProduct, @{$Global{$trans}});
 			}
 			else {
-				if ($Product{$curProduct}{$trans} != undef) {
-					@tmp = @{$Product{$curProduct}{$trans}};
-				}
-				elsif ($Global{$trans} != undef) {
-					@tmp = @{$Global{$trans}};
-				}
-				else {
-					print STDERR "Warning!! Variable $trans undefined!\n\a";
-				}
+				warning("[Warning]", "Variable '\@$trans' undefined!", $curProduct);
 			};
-			if (@tmp != undef) {
-				if ($x == 0 ) {
+			if (@tmp > 0) {
+				if (@vals == 0 ) {
 					@vals=@tmp;
 				}
 				else {
@@ -586,34 +619,73 @@ sub VareqVar {
 			};
 		}
 		else {
-			if ($x == 0) {
-				$vals[0]=$_[0];
+			if (@vals == 0) {
+				@vals=($value);
 			}
 			else {
-				@vals=(@vals,$_[$x]);
+				@vals=(@vals,$value);
 			};
 		};
 	};
-	return @vals;
+	return uniq(@vals);
 };
 
-#This makes sure all entries in the variable are unique. If it finds a duplicate, it removes it
+# uniq
+# This makes sure all entries in the variable are unique. If it finds a duplicate, it removes it.
+#
+# INPUT1-*: Array entries
+# OUTPUT: Same array entries with duplicates removed.
 sub uniq {
 	my @return = ();
 	my %seen = ();
 	foreach my $elem ( @_ ) {
-		next if $seen{ $elem }++;
-		if (!($elem=~/ /ig)) {
-			if ( $return[0] eq "") {
-				@return = $elem;
-			}
-			else {
-				@return=(@return, $elem);
+		if (defined $elem && !(defined $seen{$elem})) {
+			$seen{$elem} = 1;
+			if (!($elem=~/ /ig)) {
+				if (!(defined $return[0] && $return[0] =~/\S/)) {
+					@return = $elem;
+				}
+				else {
+					@return=(@return, $elem);
+				};
 			};
 		};
 	};
 	return @return;
 };
+
+# warning
+# Display a warning message and save it to $Warnings to be printed out at the end
+#
+# INPUT1: Warning message
+# INPUT2: if non 0 remove all line chars
+
+sub warning {
+	my $prefix = shift(@_);
+	my $message = shift(@_);
+	my $curProduct =shift(@_);
+
+	if (!(defined $curProduct && $curProduct=~/\S/)) {
+		$curProduct = " ";
+	};
+	my $color = `tput color > /dev/null 2>&1; echo \$?`;
+	my $whitespace = "";
+
+	if ($message =~/^(\s+)\S/) {
+		$whitespace .= $1;
+		$message=~s/^\s+(\S)/$1/i;
+	};
+	if ($color) {
+		$prefix = $termColors{"red"} . $prefix;
+	}
+	else {
+		$prefix = $termColors{"bold"} . $prefix;
+	};
+	$prefix .=$termColors{"reset"};
+
+	$Warnings{$curProduct} .= "$prefix $message\a\n";
+	print STDERR "$whitespace$prefix $message\a\n";
+}
 
 # Documentation
 

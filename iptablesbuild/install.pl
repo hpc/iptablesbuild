@@ -62,7 +62,7 @@ if (defined $opt_help) {
 
 
 # Sets Default values to the variables or uses what the user has given.
-my $version = "2.3.0";
+my $version = "2.3.1";
 my $conf = "/etc";
 my $bin = "/usr/sbin";
 my $perl = "/usr/bin/perl";
