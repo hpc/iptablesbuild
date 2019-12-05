@@ -433,7 +433,7 @@ Build: foreach my $curProduct (@Build) {
 											if (!($host=~/^\d+\.\d+\.\d+\.\d+$/ig || $host=~/^\d+\.\d+\.\d+\.\d+\/\d+$/ig)) {
 												if ( $host ne "") {
 													if ($lookup eq "" && !($var=~/templatelist/i) && !($var=~/templates/) && !($host=~/^eth\d+/ || $host=~/^bond\d+/ || $host=~/^bond\d+/ || $host=~/^em\d+/ || $host=~/^p\d+p\d+/ ||  $host=~/^ib\d+/ || $host=~/^rhevm$/)) {
-														$lookup=`nslookup \"$host\" | grep -i "address:" | grep -v "#" | awk '{print \$2}'`;
+														$lookup=`nslookup \"$host\" | grep -i "address:" | grep -v "#" | awk '{print \$2}' | grep -P '\\d+\\.\\d+\\.\\d+\\.\\d+'`;
 														$lookup=~s/\n/ /ig;
 														$lookup=~s/\n$//;
 														if ($lookup eq "") {
