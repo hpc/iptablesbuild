@@ -361,7 +361,7 @@ Build: foreach my $curProduct (@Build) {
 				}
 				my @file = "";
 				#This opens the template file and stores it in @file
-				if ($Template{$template}{"template"}[0]=~/\S/) {
+				if (defined $Template{$template}{"template"}[0] && $Template{$template}{"template"}[0]=~/\S/) {
 					open(my $file, $Template{$template}{"template"}[0]) or die "\nFailed to open template file: \"$Template{$template}{\"template\"}[0]\"! from Template $template, for Product \"$curProduct\" exiting!";
 					@file=<$file>;
 					close($file);
@@ -432,7 +432,7 @@ Build: foreach my $curProduct (@Build) {
 											$host=~s/\t//ig;
 											if (!($host=~/^\d+\.\d+\.\d+\.\d+$/ig || $host=~/^\d+\.\d+\.\d+\.\d+\/\d+$/ig)) {
 												if ( $host ne "") {
-													if ($lookup eq "" && !($var=~/templatelist/i) && !($var=~/templates/) && !($host=~/^eth\d+/ || $host=~/^bond\d+/ || $host=~/^bond\d+/ || $host=~/^em\d+/ || $host=~/^p\d+p\d+/ ||  $host=~/^ib\d+/)) {
+													if ($lookup eq "" && !($var=~/templatelist/i) && !($var=~/templates/) && !($host=~/^eth\d+/ || $host=~/^bond\d+/ || $host=~/^bond\d+/ || $host=~/^em\d+/ || $host=~/^p\d+p\d+/ ||  $host=~/^ib\d+/ || $host=~/^rhevm$/)) {
 														$lookup=`nslookup \"$host\" | grep -i "address:" | grep -v "#" | awk '{print \$2}'`;
 														$lookup=~s/\n/ /ig;
 														$lookup=~s/\n$//;
@@ -570,7 +570,7 @@ sub Varcheck {
 
 sub ValueCheck {
 	my @letters=split( "", "$_[0]");
-	my $characters="abcdefghijklmnopqrstuvwxyz1234567890ABCDEFGHIJKLMNOPQRSTUVWXYZ_ }{=-.,[]\n/#\t@\\\/\r\n";
+	my $characters="abcdefghijklmnopqrstuvwxyz1234567890ABCDEFGHIJKLMNOPQRSTUVWXYZ_ }{=-.,:[]\n/#\t@\\\/\r\n";
 	for (my $x=0; $x <= $#letters; $x++) {
 		if ("$characters"=~/\Q$letters[$x]\E/g) {
 		}
@@ -717,10 +717,14 @@ Displays version information
 
 Displays help messages
 
+=back
+
 =head1 EXAMPLES
 
 iptablesbuild web01 - This will build the configuration for web01.
 
 =head1 SEE
+
+=over 4
 
 =item B<iptablestest, iptablesbuild.conf>

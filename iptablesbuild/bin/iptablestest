@@ -1,4 +1,6 @@
 #!%perl%
+use strict;
+use warnings;
 # Copyright (c) 2011-2012 Los Alamos National Security, LLC. All rights reserved.
 
 # This program was prepared by Los Alamos National Security, LLC at Los Alamos 
@@ -18,12 +20,14 @@
 
 use Getopt::Long qw(:config no_ignore_case require_order);
 
-$verbose =0;
-$version="2.2.5";
+my $verbose =0;
+my $version="%version%";
 
-$opt_version = undef;
-$opt_help = undef;
-$opt_template = undef;
+my $opt_version = undef;
+my $opt_help = undef;
+my $opt_template = undef;
+my $opt_verbose = undef;
+
 GetOptions(
 	'version|V'	=> \$opt_version,
 	'verbose|v'	=> \$opt_verbose,
@@ -38,11 +42,11 @@ if (defined $opt_version) {
 if (!(defined $ARGV[0]) || $ARGV[0] eq "-h") {
 	print "iptablestest <options> <file>\n";
 	print "options:\n";
-	print "\t-V version: displays the current version\n";
-	print "\t-v verbose: displays more information about errors found\n";
-	print "\t-t template: use for testing a template as opposed to a normal iptables config file\n";
-	print "\t-h help: displays this menu\n";
-	exit 1;
+	print "\t-V --version: displays the current version\n";
+	print "\t-v --verbose: displays more information about errors found\n";
+	print "\t-t --template: use for testing a template as opposed to a normal iptables config file\n";
+	print "\t-h --help: displays this menu\n";
+	exit 0;
 }
 
 my @files =();
@@ -58,10 +62,10 @@ foreach my $file (@files) {
 	$file=~s/\n//ig;
 	print "#################\n";
 	print "# Checking $file\n";
-	open(file, $file) or die "Error! Could not open $file\n";
-	my @Contents=<file>;
-	close(file);
-
+	open(my $fileHandle, $file) or die "Error! Could not open $file\n";
+	my @Contents=<$fileHandle>;
+	close($fileHandle);
+	my $characters;
 	if (defined $opt_template) {
 		$characters="abcdefghijklmnopqrstuvwxyz1234567890-+_ \n*:.\"\'\[\]\(\)/,!\@";
 	}
@@ -80,116 +84,114 @@ foreach my $file (@files) {
 	my %chain=();
 
 	my $problem = 0;
-	for ($x=0; $x <= $#Contents; $x++) {
-		if (!($Contents[$x]=~/^#/g)) {
-			$line = $x+1;
+	my $lineNum = 0;
+	for my $line (@Contents) {
+		if (!($line=~/^#/g)) {
+			$lineNum++;
 			# Do all lines start with a "-A" or ":"?
-			if (!($Contents[$x]=~/^-A/ || $Contents[$x]=~/^:/)) {
-				if ($Contents[$x]=~/^(.)/ && !$Contents[$x]=~/^COMMIT/) {
+			if (!($line=~/^-A/ || $line=~/^:/)) {
+				if ($line=~/^(.)/ && !$line=~/^COMMIT/) {
 					$problem=1;
-					print "Error! line $line: Invalid Starting String \"$1\"\n";
+					print "Error! line $lineNum: Invalid Starting String \"$1\"\n";
 				}
 			}
-			if ($Contents[$x]=~/^\s/ && !($Contents[$x]=~/^\n/)) {
+			if ($line=~/^\s/ && !($line=~/^\n/)) {
 				$problem = 1;
-				print "Error! line $line: leading whitespace detected (ie spaces). iptables can't handle this.\n";
+				print "Error! line $lineNum: leading whitespace detected (ie spaces). iptables can't handle this.\n";
 			};
 			# Ignore anything that ends with a "+" it's most likely just an interface
-			$Contents[$x]=~s/\".+\"/\"\"/ig;
-			$Contents[$x]=~s/\'.+\'/\'\'/ig;
+			$line=~s/\".+\"/\"\"/ig;
+			$line=~s/\'.+\'/\'\'/ig;
 			# Check to make sure all source or destination flags have an ip address associated with them.
-			if ($Contents[$x]=~/(-s) / || $Contents[$x]=~/(-d) /) {
-				$flag = $1;
+			if ($line=~/(-s) / || $line=~/(-d) /) {
+				my $flag = $1;
 				if (defined $opt_template) {
-					if (!($Contents[$x]=~/$flag \d+\.\d+\.\d+\.\d+ / || $Contents[$x]=~/$flag \d+\.\d+\.\d+\.\d+\/\d+ / || $Contents[$x]=~/\@\S+\s/)) {
+					if (!($line=~/$flag \d+\.\d+\.\d+\.\d+ / || $line=~/$flag \d+\.\d+\.\d+\.\d+\/\d+ / || $line=~/\@\S+\s/)) {
 						$problem=1;
 						print "Error! line $line: ip address or variable not used for $flag statement\n";
 						if (defined $opt_verbose) {
-							print "line: \"$Contents[$x]\"\n";
+							print "line: \"$line\"\n";
 						}
 						
 					};
 				} 
 				else {
-					if (!($Contents[$x]=~/$flag \d+\.\d+\.\d+\.\d+ / || $Contents[$x]=~/$flag \d+\.\d+\.\d+\.\d+\/\d+ /)) {
-						$line = $x+1;
+					if (!($line=~/$flag \d+\.\d+\.\d+\.\d+ / || $line=~/$flag \d+\.\d+\.\d+\.\d+\/\d+ /)) {
 						$problem=1;
-						print "Error! line $line: ip address not used for $1 statement\n";
+						print "Error! line $lineNum: ip address not used for $1 statement\n";
 						if (defined $opt_verbose) {
-							print "line: \"$Contents[$x]\"\n";
+							print "line: \"$line\"\n";
 						}
 					}
 				};
 			}
 	
 			# Checks to make sure the -d or -s flag makes sense with the chain being used.
-			if ($Contents[$x]=~/-A\s(\S+)\s/) {
+			if ($line=~/-A\s(\S+)\s/) {
 				my $aChain=$1;
 				if ($aChain eq "INPUT") {
-					if ($Contents[$x]=~/-j\s+(\S+)\s/) {
+					if ($line=~/-j\s+(\S+)\s/) {
 						$chains{$1}.="i";
 					};
-					if ($Contents[$x]=~/-o /) {
+					if ($line=~/-o /) {
 						$problem=1;
-						print "Error! line $line: The -i flag cannot be used within the output chain.\n";
+						print "Error! line $lineNum: The -i flag cannot be used within the output chain.\n";
 					}
-					if ($Contents[$x]=~/-d /) {
+					if ($line=~/-d /) {
 						$problem=1;
-						print "Warning! line $line: The -d is used to define a destination. This usually doesn't matter for an input chain. Are you sure you didn't intend to use -s?\n";
+						print "Warning! line $lineNum: The -d is used to define a destination. This usually doesn't matter for an input chain. Are you sure you didn't intend to use -s?\n";
 					}
 				}
 				elsif ($aChain eq "OUTPUT") {
-					if ($Contents[$x]=~/-j\s+(\S+)\s/) {
+					if ($line=~/-j\s+(\S+)\s/) {
 						$chains{$1}.="o";
 						if ($1 =~/syn-flood/i) {
-							print "syn-flood: $Contents[$x]\n";
+							print "syn-flood: $line\n";
 						};
 					};
-					if ($Contents[$x]=~/-i /) {
+					if ($line=~/-i /) {
 						$problem=1;
 						print "Error! line $line: The -i flag cannot be used within the output chain.\n";
 					}
-					if ($Contents[$x]=~/-s /) {
+					if ($line=~/-s /) {
 						$problem=1;
 						print "Warning! line $line: The -s is used to define a source. This usually doesn't matter for an output chain. Are you sure you didn't intend to use -d?\n";
 					}
 				}
 				else {
-					if ($Contents[$x]=~/-j\s+(\S+)\s/) {
+					if ($line=~/-j\s+(\S+)\s/) {
 							$chains{$1}.="e";
 					};
 				};
 			};
 			# Check to see if any invalid characters exist in the iptables config file.
-			@letter=split("", $Contents[$x]);
-			for ($y=0; $y <= $#letter; $y++) {
-				#print $letter[$y];
+			my @letters=split("", $line);
+			foreach my $letter (@letters) {
 			
-				$letter[$y]=~s/\*/\\\*/g;
-				$letter[$y]=~s/\./\\\./g;
-				$letter[$y]=~s/\]/\\\]/g;
-				$letter[$y]=~s/\[/\\\[/g;
-				$letter[$y]=~s/\)/\\\)/g;
-				$letter[$y]=~s/\(/\\\(/g;
-				$letter[$y]=~s/\+/\\+/g;
-				if (!("$characters"=~/.*$letter[$y].*/ig)) {
-					$line = $x+1;
+				$letter=~s/\*/\\\*/g;
+				$letter=~s/\./\\\./g;
+				$letter=~s/\]/\\\]/g;
+				$letter=~s/\[/\\\[/g;
+				$letter=~s/\)/\\\)/g;
+				$letter=~s/\(/\\\(/g;
+				$letter=~s/\+/\\+/g;
+				if (!("$characters"=~/.*$letter.*/ig)) {
 					$problem=1;
-					print "Error! line $line: Illegal character \"$letter[$y]\".\n";
+					print "Error! line $lineNum: Illegal character \"$letter\".\n";
 					if (defined $opt_verbose) {
-						print "line: \"$Contents[$x]\"\n";
+						print "line: \"$line\"\n";
 					}
 					
 				}
 				
 			}
-			if  ($Contents[$x]=~/^:(\S+)\s/) {
-				$nChain=$1;
-				if ($chain{$nChain} != 1) {
+			if  ($line=~/^:(\S+)\s/) {
+				my $nChain=$1;
+				if (!(defined $chain{$nChain})) {
 					$chain{$nChain}=1;
 				}
 				else {
-					print "Error! line $line: $nChain has been defined twice!\n";
+					print "Error! line $lineNum: $nChain has been defined twice!\n";
 				};
 			};
 		};
@@ -198,36 +200,36 @@ foreach my $file (@files) {
 	# Does a deeper check to see if all -d/-s and -o/-i match the chain being used.
 	# This requires the second loop through as the one above matches non standard 
 	#  chains to the standard chains as it passes through the config
-	for ($x=0; $x <= $#Contents; $x++) {
-		if (!($Contents[$x]=~/^#/g)) {
-			$line = $x+1;
-			if ($Contents[$x]=~/-A\s+(\S+)\s/) {
-				$aChain=$1;
-				if (!($chains{$aChain}=~/o/i || $chains{$aChain}=~/e/i)) {
-					if ($Contents[$x]=~/-o /) {
+	$lineNum = 0;
+	foreach my $line (@Contents) {
+		$lineNum++;
+		if (!($line=~/^#/g)) {
+			if ($line=~/-A\s+(\S+)\s/) {
+				my $aChain=$1;
+				if (!(defined $chains{$aChain} && ($chains{$aChain}=~/o/i || $chains{$aChain}=~/e/i))) {
+					if ($line=~/-o /) {
 						$problem=1;
 						print "Error! line $line: The -o flag does not function unless this chain uses the output chain.\n";
 					};
-					if ($Contents[$x]=~/-d /) {
+					if ($line=~/-d /) {
 						$problem=1;
 						print "Warning! line $line: The -d is used to define a destination. This usually doesn't matter for an input chain. Are you sure you didn't intend to use -s?\n";
 					};
 				};
-				if (!($chains{$aChain}=~/i/i || $chains{$aChain}=~/e/i)) {
-					if ($Contents[$x]=~/-i /) {
+				if (!(defined $chains{$aChain} && ($chains{$aChain}=~/i/i || $chains{$aChain}=~/e/i))) {
+					if ($line=~/-i /) {
 						$problem=1;
 						print "Error! line $line: The -i flag does not function unless this chain uses the input chain.\n";
 					};
-					if ($Contents[$x]=~/-s /) {
+					if ($line=~/-s /) {
 						$problem=1;
 						print "Warning! line $line: The -s is used to define a source. This usually doesn't matter for an output chain. Are you sure you didn't intend to use -d?\n";
 					};
 				};
-				if ($chains{$aChain}=~/i/i && $chains{$aChain}=~/o/i) {
+				if (defined $chains{$aChain} && $chains{$aChain}=~/i/i && $chains{$aChain}=~/o/i) {
 					$problem=1;
 					print "Warning! line $line: chain $aChain recieves traffic from both OUTPUT and INPUT chains. This may be undesirable...\n";
 				};
-					
 			};
 		};
 	};
